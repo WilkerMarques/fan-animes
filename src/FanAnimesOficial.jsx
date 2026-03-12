@@ -65,6 +65,41 @@ async function fetchClicks() {
   return { unauthorized: false, data };
 }
 
+async function savePageview({ page }) {
+  try {
+    await fetch("/api/save-pageview", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        page,
+        device: /Mobi|Android/i.test(navigator.userAgent) ? "mobile" : "desktop",
+      }),
+    });
+  } catch (e) {
+    console.error("API save-pageview:", e);
+  }
+}
+
+async function fetchPageviews() {
+  const res = await fetch("/api/dashboard-pageviews", {
+    method: "GET",
+    credentials: "include",
+  });
+
+  if (res.status === 401) {
+    return { unauthorized: true, data: [] };
+  }
+
+  if (!res.ok) {
+    throw new Error("Erro ao buscar pageviews");
+  }
+
+  const data = await res.json();
+  return { unauthorized: false, data };
+}
+
 async function loginDashboard(password) {
   const res = await fetch("/api/login", {
     method: "POST",
@@ -174,22 +209,28 @@ function Particle({ style }) {
 // ============================================================
 function Dashboard({ onExit }) {
   const [clicks, setClicks] = useState([]);
+  const [pageviews, setPageviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [rangeDays, setRangeDays] = useState(7);
 
   useEffect(() => {
     let mounted = true;
 
-    fetchClicks()
-      .then((result) => {
+    Promise.all([
+      fetchClicks().catch(() => ({ unauthorized: false, data: [] })),
+      fetchPageviews().catch(() => ({ unauthorized: false, data: [] })),
+    ])
+      .then(([clicksResult, pageviewsResult]) => {
         if (!mounted) return;
 
-        if (result.unauthorized) {
+        if (clicksResult.unauthorized || pageviewsResult.unauthorized) {
           onExit("login");
           return;
         }
 
-        setClicks(Array.isArray(result.data) ? result.data : []);
+        setClicks(Array.isArray(clicksResult.data) ? clicksResult.data : []);
+        setPageviews(Array.isArray(pageviewsResult.data) ? pageviewsResult.data : []);
       })
       .catch((error) => {
         console.error(error);
@@ -203,21 +244,41 @@ function Dashboard({ onExit }) {
     };
   }, [onExit]);
 
-  const filtered = filter === "all" ? clicks : clicks.filter((c) => c.platform === filter);
+  const rangeClicks =
+    rangeDays === "all"
+      ? clicks
+      : clicks.filter((c) => {
+          const t = new Date(c.clicked_at).getTime();
+          if (!Number.isFinite(t)) return false;
+          return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
+        });
+
+  const filtered = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
+
+  const rangePageviews =
+    rangeDays === "all"
+      ? pageviews
+      : pageviews.filter((p) => {
+          const t = new Date(p.viewed_at).getTime();
+          if (!Number.isFinite(t)) return false;
+          return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
+        });
+
+  const homeViews = rangePageviews.filter((p) => p.page === "home").length;
 
   const totals = CONFIG.links.reduce((acc, l) => {
-    acc[l.label] = clicks.filter((c) => c.label === l.label).length;
+    acc[l.label] = rangeClicks.filter((c) => c.label === l.label).length;
     return acc;
   }, {});
 
   const byPlatform = ["spotify", "youtube", "instagram"].map((p) => ({
     name: p,
-    count: clicks.filter((c) => c.platform === p).length,
+    count: rangeClicks.filter((c) => c.platform === p).length,
   }));
 
   const byDevice = {
-    mobile: clicks.filter((c) => c.device === "mobile").length,
-    desktop: clicks.filter((c) => c.device === "desktop").length,
+    mobile: rangeClicks.filter((c) => c.device === "mobile").length,
+    desktop: rangeClicks.filter((c) => c.device === "desktop").length,
   };
 
   const maxCount = Math.max(...Object.values(totals), 1);
@@ -279,9 +340,35 @@ function Dashboard({ onExit }) {
           </div>
         ) : (
           <>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 28 }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               {[
-                { label: "Total Cliques", value: clicks.length, color: "#00d4ff" },
+                { id: "all", label: "Total" },
+                { id: 7, label: "7 dias" },
+                { id: 14, label: "14 dias" },
+                { id: 28, label: "28 dias" },
+              ].map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => setRangeDays(r.id)}
+                  style={{
+                    background: rangeDays === r.id ? "rgba(168,85,247,0.18)" : "rgba(255,255,255,0.04)",
+                    border: rangeDays === r.id ? "1px solid rgba(168,85,247,0.45)" : "1px solid rgba(255,255,255,0.08)",
+                    color: rangeDays === r.id ? "#c4b5fd" : "#4a6a7a",
+                    padding: "6px 14px",
+                    borderRadius: 20,
+                    cursor: "pointer",
+                    fontSize: "0.75rem",
+                  }}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 28 }}>
+              {[
+                { label: "Total Cliques", value: rangeClicks.length, color: "#00d4ff" },
+                { label: "Home Views", value: homeViews, color: "#f59e0b" },
                 { label: "Mobile", value: byDevice.mobile, color: "#a855f7" },
                 { label: "Desktop", value: byDevice.desktop, color: "#1DB954" },
               ].map((c) => (
@@ -305,7 +392,7 @@ function Dashboard({ onExit }) {
               ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 28 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 28 }}>
               {byPlatform.map((p) => (
                 <div
                   key={p.name}
@@ -568,6 +655,10 @@ export default function App() {
 function FanAnimesPage({ onFooterTap }) {
   const { fireClickButton } = usePixels();
   const [clicked, setClicked] = useState(null);
+
+  useEffect(() => {
+    savePageview({ page: "home" });
+  }, []);
 
   const handleClick = (link) => {
     setClicked(link.id);
