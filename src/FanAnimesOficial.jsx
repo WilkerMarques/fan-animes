@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 // ============================================================
 const CONFIG = {
   // --- Pixels de rastreamento ---
-  facebookPixelId: "3387595921414767",
+  facebookPixelId: "932236762498733",
   tiktokPixelId:   "D6P18IJC77UAQ8PMBTDG",
 
   // --- Perfil ---
