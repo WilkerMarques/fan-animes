@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 // ============================================================
 const CONFIG = {
   // --- Pixels de rastreamento ---
-  facebookPixelId: "932236762498733",
+  facebookPixelId: "3387595921414767",
   tiktokPixelId:   "D6P18IJC77UAQ8PMBTDG",
 
   // --- Perfil ---
@@ -83,7 +83,7 @@ const CONFIG = {
       id: 9,
       label: "Fan Animes",
       sub: null,
-      url: "https://www.instagram.com/fananimesoficial",
+      url: "https://www.instagram.com/fananimesoficial?igsh=emlncnEyYWczcjZk",
       icon: "instagram",
       color: "#E1306C",
     },
@@ -175,17 +175,17 @@ export default function FanAnimesPage() {
   const handleClick = (link) => {
     setClicked(link.id);
 
-    // 1. Dispara Subscribe no Facebook e TikTok
+    // 1. Dispara Purchase no Facebook e TikTok
     // 2. Aguarda 300ms para garantir que o pixel enviou antes de redirecionar
     if (window.fbq) {
-      window.fbq('track', 'Subscribe', {
+      window.fbq('track', 'Purchase', {
         content_name: link.label,
         content_category: link.icon,   // "spotify" | "youtube" | "instagram"
         status: true,
       });
     }
     if (window.ttq) {
-      window.ttq.track('Subscribe', { content_name: link.label });
+      window.ttq.track('Purchase', { content_name: link.label });
     }
 
     setTimeout(() => {
