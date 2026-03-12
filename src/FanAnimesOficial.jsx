@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 // ============================================================
 // 🔧 CONFIGURAÇÃO
@@ -207,42 +207,61 @@ function Particle({ style }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
+const DASHBOARD_POLL_INTERVAL_MS = 30 * 1000; // 30 segundos
+
 function Dashboard({ onExit }) {
   const [clicks, setClicks] = useState([]);
   const [pageviews, setPageviews] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("all");
   const [rangeDays, setRangeDays] = useState(7);
+
+  const loadDashboardData = useCallback(async (showRefreshing = false) => {
+    if (showRefreshing) setRefreshing(true);
+
+    const [clicksResult, pageviewsResult] = await Promise.all([
+      fetchClicks().catch(() => ({ unauthorized: false, data: [] })),
+      fetchPageviews().catch(() => ({ unauthorized: false, data: [] })),
+    ]);
+
+    if (clicksResult.unauthorized || pageviewsResult.unauthorized) {
+      onExit("login");
+      return;
+    }
+
+    setClicks(Array.isArray(clicksResult.data) ? clicksResult.data : []);
+    setPageviews(Array.isArray(pageviewsResult.data) ? pageviewsResult.data : []);
+
+    if (showRefreshing) setRefreshing(false);
+  }, [onExit]);
 
   useEffect(() => {
     let mounted = true;
 
-    Promise.all([
-      fetchClicks().catch(() => ({ unauthorized: false, data: [] })),
-      fetchPageviews().catch(() => ({ unauthorized: false, data: [] })),
-    ])
-      .then(([clicksResult, pageviewsResult]) => {
-        if (!mounted) return;
-
-        if (clicksResult.unauthorized || pageviewsResult.unauthorized) {
-          onExit("login");
-          return;
-        }
-
-        setClicks(Array.isArray(clicksResult.data) ? clicksResult.data : []);
-        setPageviews(Array.isArray(pageviewsResult.data) ? pageviewsResult.data : []);
-      })
-      .catch((error) => {
-        console.error(error);
-      })
-      .finally(() => {
-        if (mounted) setLoading(false);
-      });
+    (async () => {
+      await loadDashboardData(false);
+      if (!mounted) return;
+      setLoading(false);
+    })();
 
     return () => {
       mounted = false;
     };
-  }, [onExit]);
+  }, [loadDashboardData]);
+
+  // Atualização automática a cada 30 segundos
+  useEffect(() => {
+    if (loading) return;
+    const interval = setInterval(() => {
+      loadDashboardData(false);
+    }, DASHBOARD_POLL_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, [loading, loadDashboardData]);
+
+  const handleRefresh = useCallback(() => {
+    loadDashboardData(true);
+  }, [loadDashboardData]);
 
   const rangeClicks =
     rangeDays === "all"
@@ -301,7 +320,23 @@ function Dashboard({ onExit }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: refreshing ? "#4a6a7a" : "#7a9bbf",
+                padding: "8px 16px",
+                borderRadius: 8,
+                cursor: refreshing || loading ? "not-allowed" : "pointer",
+                fontSize: "0.8rem",
+              }}
+              title="Atualizar dados"
+            >
+              {refreshing ? "Atualizando…" : "Atualizar"}
+            </button>
             <button
               onClick={handleLogout}
               style={{
