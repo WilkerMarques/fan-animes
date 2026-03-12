@@ -83,7 +83,7 @@ const CONFIG = {
       id: 9,
       label: "Fan Animes",
       sub: null,
-      url: "https://www.instagram.com/fananimesoficial?igsh=emlncnEyYWczcjZk",
+      url: "https://www.instagram.com/fananimesoficial",
       icon: "instagram",
       color: "#E1306C",
     },
