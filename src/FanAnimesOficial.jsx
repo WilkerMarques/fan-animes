@@ -152,7 +152,7 @@ function usePixels() {
   const trackClick = (linkLabel) => {
     // Facebook
     if (window.fbq) {
-      window.fbq('trackCustom', 'LinkClick', { link: linkLabel });
+      window.fbq('trackCustom', 'ClickButton', { content_name: linkLabel });
     }
     // TikTok
     if (window.ttq) {
@@ -175,17 +175,17 @@ export default function FanAnimesPage() {
   const handleClick = (link) => {
     setClicked(link.id);
 
-    // 1. Dispara Purchase no Facebook e TikTok
+    // 1. Dispara ClickButton no Facebook e TikTok
     // 2. Aguarda 300ms para garantir que o pixel enviou antes de redirecionar
     if (window.fbq) {
-      window.fbq('track', 'Purchase', {
+      window.fbq('trackCustom', 'ClickButton', {
         content_name: link.label,
         content_category: link.icon,   // "spotify" | "youtube" | "instagram"
         status: true,
       });
     }
     if (window.ttq) {
-      window.ttq.track('Purchase', { content_name: link.label });
+      window.ttq.track('ClickButton', { content_name: link.label });
     }
 
     setTimeout(() => {
