@@ -316,21 +316,6 @@ function Dashboard({ onExit }) {
             >
               Sair
             </button>
-
-            <button
-              onClick={() => onExit("home")}
-              style={{
-                background: "rgba(255,255,255,0.05)",
-                border: "1px solid rgba(255,255,255,0.1)",
-                color: "#7a9bbf",
-                padding: "8px 16px",
-                borderRadius: 8,
-                cursor: "pointer",
-                fontSize: "0.8rem",
-              }}
-            >
-              ← Voltar
-            </button>
           </div>
         </div>
 
@@ -476,7 +461,7 @@ function Dashboard({ onExit }) {
                 CLIQUES RECENTES
               </div>
 
-              {filtered.slice(0, 20).map((c, i) => (
+              {filtered.slice(0, 10).map((c, i) => (
                 <div
                   key={`${c.clicked_at}-${i}`}
                   style={{
