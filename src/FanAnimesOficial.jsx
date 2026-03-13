@@ -795,9 +795,14 @@ function FanAnimesPage({ onFooterTap }) {
     savePageview({ page: "home" });
   }, []);
 
+  const isYouTube = (icon, url) =>
+    icon === "youtube" || /youtube\.com|youtu\.be/i.test(url || "");
+
   const handleClick = (link) => {
     setClicked(link.id);
-    fireClickButton(link.label, link.icon);
+    if (!isYouTube(link.icon, link.url)) {
+      fireClickButton(link.label, link.icon);
+    }
     saveClick({ label: link.label, platform: link.icon });
 
     setTimeout(() => {
@@ -807,7 +812,9 @@ function FanAnimesPage({ onFooterTap }) {
   };
 
   const handleSocialClick = (s) => {
-    fireClickButton(`social_${s.icon}`, s.icon);
+    if (!isYouTube(s.icon, s.url)) {
+      fireClickButton(`social_${s.icon}`, s.icon);
+    }
     saveClick({ label: `social_${s.icon}`, platform: s.icon });
   };
 
