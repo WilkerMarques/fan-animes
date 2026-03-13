@@ -27,6 +27,21 @@ try {
     http_response_code(200);
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Erro ao salvar pageview']);
+    $msg = $e->getMessage();
+    $code = $e->getCode();
+    // Tabela antiga sem coluna source?
+    if ($code === '42S22' || stripos($msg, 'Unknown column') !== false && stripos($msg, 'source') !== false) {
+        try {
+            $stmt = $pdo->prepare("INSERT INTO pageviews (page, device) VALUES (?, ?)");
+            $stmt->execute([$page, $device]);
+            http_response_code(200);
+            echo json_encode(['ok' => true]);
+        } catch (Throwable $e2) {
+            http_response_code(500);
+            echo json_encode(['error' => 'Erro ao salvar pageview']);
+        }
+    } else {
+        http_response_code(500);
+        echo json_encode(['error' => 'Erro ao salvar pageview']);
+    }
 }
