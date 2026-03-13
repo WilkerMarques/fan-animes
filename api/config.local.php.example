@@ -1,0 +1,9 @@
+<?php
+return [
+    'db_host'     => 'localhost',
+    'db_name'     => 'seu_banco',
+    'db_user'     => 'seu_usuario',
+    'db_password' => 'sua_senha',
+    'dashboard_password' => 'senha_do_dashboard',
+    'cookie_secret' => 'uma_string_longa_aleatoria_para_assinatura_do_cookie',
+];
