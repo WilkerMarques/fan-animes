@@ -33,7 +33,7 @@ const TRAFFIC_SOURCE_KEY = "fan_traffic_source";
 function getTrafficSource() {
   try {
     const params = new URLSearchParams(window.location.search);
-    // Em localhost: ?source=tiktok ou ?source=facebook para testar cliques com origem
+    // 1) Override manual em localhost: ?source=tiktok ou ?source=facebook
     const host = (typeof window !== "undefined" && window.location.hostname) || "";
     if (host === "localhost" || host === "127.0.0.1") {
       const testSource = (params.get("source") || "").toLowerCase().trim();
@@ -46,8 +46,7 @@ function getTrafficSource() {
         return null;
       }
     }
-    const stored = sessionStorage.getItem(TRAFFIC_SOURCE_KEY);
-    if (stored === "facebook" || stored === "tiktok") return stored;
+    // 2) URL atual manda mais do que o valor antigo
     const utm = (params.get("utm_source") || "").toLowerCase();
     if (utm.includes("facebook") || params.has("fbclid")) {
       sessionStorage.setItem(TRAFFIC_SOURCE_KEY, "facebook");
@@ -57,6 +56,9 @@ function getTrafficSource() {
       sessionStorage.setItem(TRAFFIC_SOURCE_KEY, "tiktok");
       return "tiktok";
     }
+    // 3) Se a URL não disser nada, usa o que já está salvo na sessão
+    const stored = sessionStorage.getItem(TRAFFIC_SOURCE_KEY);
+    if (stored === "facebook" || stored === "tiktok") return stored;
   } catch (_) {}
   return null;
 }
