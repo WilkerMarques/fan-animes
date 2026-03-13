@@ -113,6 +113,15 @@ try {
   }
   // .gitignore no deploy para git add -A não pegar node_modules/build/.deploy-staging
   fs.writeFileSync(path.join(stagingDir, '.gitignore'), 'node_modules\nbuild\n.deploy-staging\n', 'utf8');
+  // .htaccess na raiz: nega acesso à pasta .git (segurança; no cPanel ajuste permissão .git para 755 se der AH00529)
+  const rootHtaccess = [
+    '# Bloquear acesso a .git',
+    '<IfModule mod_rewrite.c>',
+    'RewriteEngine On',
+    'RewriteRule ^\\.git - [F]',
+    '</IfModule>',
+  ].join('\n');
+  fs.writeFileSync(path.join(stagingDir, '.htaccess'), rootHtaccess, 'utf8');
 
   try {
     const status = execSync('git status --porcelain', { cwd: root, encoding: 'utf-8' }).trim();

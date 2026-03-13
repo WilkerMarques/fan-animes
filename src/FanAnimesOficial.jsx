@@ -57,6 +57,8 @@ if (typeof window !== "undefined" && !API_BASE && window.location.port) {
 }
 
 async function saveClick({ label, platform }) {
+  const trimmedLabel = (label == null ? "" : String(label)).trim();
+  if (!trimmedLabel) return;
   try {
     await fetch(`${API_BASE}/api/save-click`, {
       method: "POST",
@@ -64,8 +66,8 @@ async function saveClick({ label, platform }) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        label,
-        platform,
+        label: trimmedLabel,
+        platform: platform || "",
         device: /Mobi|Android/i.test(navigator.userAgent) ? "mobile" : "desktop",
         source: getTrafficSource(),
       }),
@@ -346,17 +348,15 @@ function Dashboard({ onExit }) {
 
   const totalCliques = byPlatform.reduce((s, p) => s + p.count, 0);
 
-  const totals = CONFIG.links.reduce((acc, l) => {
-    acc[l.label] = rangeClicks.filter((c) => c.label === l.label).length;
-    return acc;
-  }, {});
+  // Para "CLIQUES POR LINK": mesmo critério do filtro de plataforma (Todos vs Spotify/Youtube/Instagram)
+  const clicksForLinksSection = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
+  const totalsPerLinkForSection = CONFIG.links.map((l) => clicksForLinksSection.filter((c) => c.label === l.label).length);
+  const maxCountForLinksSection = Math.max(...totalsPerLinkForSection, 1);
 
   const byDevice = {
     mobile: rangeClicks.filter((c) => c.device === "mobile").length,
     desktop: rangeClicks.filter((c) => c.device === "desktop").length,
   };
-
-  const maxCount = Math.max(...Object.values(totals), 1);
 
   const handleLogout = async () => {
     await logoutDashboard();
@@ -547,9 +547,8 @@ function Dashboard({ onExit }) {
               </div>
 
               {CONFIG.links.map((l) => {
-                const source = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
-                const count = source.filter((c) => c.label === l.label).length;
-                const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                const count = clicksForLinksSection.filter((c) => c.label === l.label).length;
+                const pct = maxCountForLinksSection > 0 ? (count / maxCountForLinksSection) * 100 : 0;
                 const col = l.icon === "spotify" ? "#1DB954" : l.icon === "youtube" ? "#FF0000" : "#E1306C";
 
                 return (
