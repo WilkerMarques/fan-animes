@@ -27,6 +27,28 @@ const CONFIG = {
 };
 
 // ============================================================
+// ORIGEM DO TRÁFEGO (Facebook / TikTok) – usada no envio e no filtro do dashboard
+// ============================================================
+const TRAFFIC_SOURCE_KEY = "fan_traffic_source";
+function getTrafficSource() {
+  try {
+    const stored = sessionStorage.getItem(TRAFFIC_SOURCE_KEY);
+    if (stored === "facebook" || stored === "tiktok") return stored;
+    const params = new URLSearchParams(window.location.search);
+    const utm = (params.get("utm_source") || "").toLowerCase();
+    if (utm.includes("facebook") || params.has("fbclid")) {
+      sessionStorage.setItem(TRAFFIC_SOURCE_KEY, "facebook");
+      return "facebook";
+    }
+    if (utm.includes("tiktok") || params.has("ttclid")) {
+      sessionStorage.setItem(TRAFFIC_SOURCE_KEY, "tiktok");
+      return "tiktok";
+    }
+  } catch (_) {}
+  return null;
+}
+
+// ============================================================
 // API HELPERS (em dev use REACT_APP_API_URL no .env.local para apontar ao HostGator)
 // ============================================================
 const API_BASE = (process.env.REACT_APP_API_URL || "").trim();
@@ -45,6 +67,7 @@ async function saveClick({ label, platform }) {
         label,
         platform,
         device: /Mobi|Android/i.test(navigator.userAgent) ? "mobile" : "desktop",
+        source: getTrafficSource(),
       }),
     });
   } catch (e) {
@@ -80,6 +103,7 @@ async function savePageview({ page }) {
       body: JSON.stringify({
         page,
         device: /Mobi|Android/i.test(navigator.userAgent) ? "mobile" : "desktop",
+        source: getTrafficSource(),
       }),
     });
   } catch (e) {
@@ -223,6 +247,7 @@ function Dashboard({ onExit }) {
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("all");
   const [rangeDays, setRangeDays] = useState(7);
+  const [sourceFilter, setSourceFilter] = useState("all"); // all | facebook | tiktok (origem do pixel)
 
   const loadDashboardData = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
@@ -276,15 +301,21 @@ function Dashboard({ onExit }) {
     return d.getTime();
   })();
 
+  const bySource = (list, sourceKey) =>
+    sourceFilter === "all" ? list : list.filter((x) => (x[sourceKey] || "").toLowerCase() === sourceFilter);
+
+  const clicksBySource = bySource(clicks, "source");
+  const pageviewsBySource = bySource(pageviews, "source");
+
   const rangeClicks =
     rangeDays === "all"
-      ? clicks
+      ? clicksBySource
       : rangeDays === "today"
-        ? clicks.filter((c) => {
+        ? clicksBySource.filter((c) => {
             const t = new Date(c.clicked_at).getTime();
             return Number.isFinite(t) && t >= todayStartMs;
           })
-        : clicks.filter((c) => {
+        : clicksBySource.filter((c) => {
             const t = new Date(c.clicked_at).getTime();
             if (!Number.isFinite(t)) return false;
             return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
@@ -294,13 +325,13 @@ function Dashboard({ onExit }) {
 
   const rangePageviews =
     rangeDays === "all"
-      ? pageviews
+      ? pageviewsBySource
       : rangeDays === "today"
-        ? pageviews.filter((p) => {
+        ? pageviewsBySource.filter((p) => {
             const t = new Date(p.viewed_at).getTime();
             return Number.isFinite(t) && t >= todayStartMs;
           })
-        : pageviews.filter((p) => {
+        : pageviewsBySource.filter((p) => {
             const t = new Date(p.viewed_at).getTime();
             if (!Number.isFinite(t)) return false;
             return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
@@ -385,7 +416,7 @@ function Dashboard({ onExit }) {
           </div>
         ) : (
           <>
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
               {[
                 { id: "all", label: "Total" },
                 { id: "today", label: "Hoje" },
@@ -407,6 +438,31 @@ function Dashboard({ onExit }) {
                   }}
                 >
                   {r.label}
+                </button>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: "0.7rem", color: "#4a6a7a", marginRight: 4 }}>Origem:</span>
+              {[
+                { id: "all", label: "Todos" },
+                { id: "facebook", label: "Facebook" },
+                { id: "tiktok", label: "TikTok" },
+              ].map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => setSourceFilter(s.id)}
+                  style={{
+                    background: sourceFilter === s.id ? "rgba(0,212,255,0.12)" : "rgba(255,255,255,0.04)",
+                    border: sourceFilter === s.id ? "1px solid rgba(0,212,255,0.4)" : "1px solid rgba(255,255,255,0.08)",
+                    color: sourceFilter === s.id ? "#00d4ff" : "#4a6a7a",
+                    padding: "6px 12px",
+                    borderRadius: 20,
+                    cursor: "pointer",
+                    fontSize: "0.72rem",
+                  }}
+                >
+                  {s.label}
                 </button>
               ))}
             </div>
