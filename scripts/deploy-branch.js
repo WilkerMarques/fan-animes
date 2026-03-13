@@ -80,7 +80,7 @@ try {
   if (fs.existsSync(apiSrc)) {
     fs.mkdirSync(apiDest, { recursive: true });
     for (const name of fs.readdirSync(apiSrc)) {
-      if (name === 'config.local.php') continue;
+      if (name === 'config.local.php' || name === 'schema-local.sql') continue;
       const s = path.join(apiSrc, name);
       const d = path.join(apiDest, name);
       if (fs.statSync(s).isDirectory()) {
@@ -123,6 +123,14 @@ try {
   ].join('\n');
   fs.writeFileSync(path.join(stagingDir, '.htaccess'), rootHtaccess, 'utf8');
 
+  // Backup config.local.php (está no .gitignore e não entra no stash; sem isso some ao trocar de branch)
+  const configLocalPath = path.join(root, 'hostgator', 'api', 'config.local.php');
+  const configLocalBackup = path.join(root, '.config.local.php.deploy-backup');
+  let didBackupConfig = false;
+  if (fs.existsSync(configLocalPath)) {
+    fs.copyFileSync(configLocalPath, configLocalBackup);
+    didBackupConfig = true;
+  }
   try {
     const status = execSync('git status --porcelain', { cwd: root, encoding: 'utf-8' }).trim();
     if (status) {
@@ -190,5 +198,10 @@ try {
     } catch (_) {
       console.warn('Alterações ficaram no stash. Rode: git stash pop');
     }
+  }
+  // Restaurar config.local.php do backup (para não perder ao fazer deploy)
+  if (didBackupConfig && fs.existsSync(configLocalBackup)) {
+    fs.copyFileSync(configLocalBackup, configLocalPath);
+    fs.unlinkSync(configLocalBackup);
   }
 }

@@ -29,6 +29,26 @@ Your app is ready to be deployed!
 
 See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
 
+### `npm run api:local`
+
+Sobe a **API PHP local** (os mesmos arquivos de `hostgator/api/`) em [http://localhost:8080](http://localhost:8080).  
+Requer PHP instalado. O React em desenvolvimento está configurado para enviar as chamadas `/api/*` para esse servidor (proxy).
+
+**Como usar:**
+
+1. **PHP instalado** – No Windows: [php.net/downloads](https://windows.php.net/download/) ou XAMPP.
+2. **Banco de dados** (escolha uma):
+   - **MySQL local** – Crie um banco (ex: `fan_animes_local`), importe o schema: `hostgator/api/schema-local.sql`. No `config.local.php` use `db_host` = `localhost`, `db_name`, `db_user` e `db_password` desse MySQL.
+   - **Mesmo banco do servidor** – No `config.local.php` use as credenciais do HostGator (host remoto, usuário, senha, nome do banco). Os dados ficarão iguais ao da produção; use com cuidado para não misturar testes com produção.
+3. **Config local** – Copie `hostgator/api/config.local.php.example` para `hostgator/api/config.local.php` e preencha: `db_*`, `dashboard_password` (senha do login do dashboard) e `cookie_secret` (qualquer string longa).
+4. **Dois terminais:**
+   - Terminal 1: `npm run api:local` (API em :8080)
+   - Terminal 2: `npm start` (React em :3000)
+
+Não defina `REACT_APP_API_URL` no `.env.local` ao usar a API local; o proxy já aponta para `http://localhost:8080`.  
+Para usar a API do HostGator em produção enquanto desenvolve, crie `.env.local` com:  
+`REACT_APP_API_URL=https://sua-url-hostgator`.
+
 ### `npm run eject`
 
 **Note: this is a one-way operation. Once you `eject`, you can't go back!**

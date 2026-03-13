@@ -32,9 +32,22 @@ const CONFIG = {
 const TRAFFIC_SOURCE_KEY = "fan_traffic_source";
 function getTrafficSource() {
   try {
+    const params = new URLSearchParams(window.location.search);
+    // Em localhost: ?source=tiktok ou ?source=facebook para testar cliques com origem
+    const host = (typeof window !== "undefined" && window.location.hostname) || "";
+    if (host === "localhost" || host === "127.0.0.1") {
+      const testSource = (params.get("source") || "").toLowerCase().trim();
+      if (testSource === "tiktok" || testSource === "facebook") {
+        sessionStorage.setItem(TRAFFIC_SOURCE_KEY, testSource);
+        return testSource;
+      }
+      if (params.has("source") && (testSource === "" || testSource === "clear")) {
+        sessionStorage.removeItem(TRAFFIC_SOURCE_KEY);
+        return null;
+      }
+    }
     const stored = sessionStorage.getItem(TRAFFIC_SOURCE_KEY);
     if (stored === "facebook" || stored === "tiktok") return stored;
-    const params = new URLSearchParams(window.location.search);
     const utm = (params.get("utm_source") || "").toLowerCase();
     if (utm.includes("facebook") || params.has("fbclid")) {
       sessionStorage.setItem(TRAFFIC_SOURCE_KEY, "facebook");
@@ -348,9 +361,13 @@ function Dashboard({ onExit }) {
 
   const totalCliques = byPlatform.reduce((s, p) => s + p.count, 0);
 
-  // Para "CLIQUES POR LINK": mesmo critério do filtro de plataforma (Todos vs Spotify/Youtube/Instagram)
+  // Para "CLIQUES POR LINK": filtrar cliques E a lista de links pela plataforma (quando não for "Todos")
   const clicksForLinksSection = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
-  const totalsPerLinkForSection = CONFIG.links.map((l) => clicksForLinksSection.filter((c) => c.label === l.label).length);
+  const linksForSection = filter === "all" ? CONFIG.links : CONFIG.links.filter((l) => l.icon === filter);
+  // Contar por label + plataforma para não contar o mesmo clique em várias linhas (ex.: "Todos")
+  const totalsPerLinkForSection = linksForSection.map((l) =>
+    clicksForLinksSection.filter((c) => c.label === l.label && c.platform === l.icon).length
+  );
   const maxCountForLinksSection = Math.max(...totalsPerLinkForSection, 1);
 
   const byDevice = {
@@ -442,8 +459,7 @@ function Dashboard({ onExit }) {
               ))}
             </div>
 
-            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-              <span style={{ fontSize: "0.7rem", color: "#4a6a7a", marginRight: 4 }}>Origem:</span>
+            <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap", alignItems: "center", justifyContent: "flex-start" }}>
               {[
                 { id: "all", label: "Todos" },
                 { id: "facebook", label: "Facebook" },
@@ -546,8 +562,8 @@ function Dashboard({ onExit }) {
                 CLIQUES POR LINK
               </div>
 
-              {CONFIG.links.map((l) => {
-                const count = clicksForLinksSection.filter((c) => c.label === l.label).length;
+              {linksForSection.map((l) => {
+                const count = clicksForLinksSection.filter((c) => c.label === l.label && c.platform === l.icon).length;
                 const pct = maxCountForLinksSection > 0 ? (count / maxCountForLinksSection) * 100 : 0;
                 const col = l.icon === "spotify" ? "#1DB954" : l.icon === "youtube" ? "#FF0000" : "#E1306C";
 

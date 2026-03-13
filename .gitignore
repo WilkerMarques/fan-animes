@@ -25,3 +25,6 @@ yarn-error.log*
 .vercel
 .env*.local
 .deploy-staging
+
+# API local (credenciais do banco)
+hostgator/api/config.local.php
