@@ -51,12 +51,52 @@ function isAuthenticated() {
     return $token && isValidSessionToken($token);
 }
 
+/**
+ * Requisição veio de localhost/127.0.0.1 (ex.: React em dev).
+ * Nesse caso usamos SameSite=None para o cookie ser enviado cross-origin.
+ * Qualquer erro aqui retorna false para não quebrar o servidor.
+ */
+function isLocalhostOrigin() {
+    try {
+        if (empty($_SERVER['HTTP_ORIGIN'])) {
+            return false;
+        }
+        $origin = (string) $_SERVER['HTTP_ORIGIN'];
+        if ($origin === '') {
+            return false;
+        }
+        $parsed = parse_url($origin);
+        $host = isset($parsed['host']) ? (string) $parsed['host'] : '';
+        if ($host === '') {
+            return false;
+        }
+        $host = strtolower(trim($host));
+        return ($host === 'localhost' || $host === '127.0.0.1');
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function buildSessionCookie($token) {
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? '; Secure' : '';
-    return COOKIE_NAME . '=' . $token . '; Path=/; HttpOnly; SameSite=Lax' . $secure . '; Max-Age=604800';
+    $forLocalhost = false;
+    try {
+        $forLocalhost = isLocalhostOrigin();
+    } catch (Throwable $e) {
+        $forLocalhost = false;
+    }
+    $sameSite = $forLocalhost ? '; SameSite=None; Secure' : '; SameSite=Lax' . $secure;
+    return COOKIE_NAME . '=' . $token . '; Path=/; HttpOnly' . $sameSite . '; Max-Age=604800';
 }
 
 function buildLogoutCookie() {
     $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? '; Secure' : '';
-    return COOKIE_NAME . '=; Path=/; HttpOnly; SameSite=Lax' . $secure . '; Max-Age=0';
+    $forLocalhost = false;
+    try {
+        $forLocalhost = isLocalhostOrigin();
+    } catch (Throwable $e) {
+        $forLocalhost = false;
+    }
+    $sameSite = $forLocalhost ? '; SameSite=None; Secure' : '; SameSite=Lax' . $secure;
+    return COOKIE_NAME . '=; Path=/; HttpOnly' . $sameSite . '; Max-Age=0';
 }
