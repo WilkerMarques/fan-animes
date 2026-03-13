@@ -1,0 +1,6 @@
+# Permite chamar /api/save-pageview em vez de /api/save-pageview.php
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteRule ^(save-pageview|save-click|dashboard-pageviews|dashboard-clicks|login|logout)$ $1.php [L]
+</IfModule>

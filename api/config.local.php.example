@@ -1,0 +1,10 @@
+<?php
+// Renomeie para config.local.php e preencha. Não commite config.local.php.
+return [
+    'db_host'     => 'localhost',
+    'db_name'     => 'seu_banco',
+    'db_user'     => 'seu_usuario',
+    'db_password' => 'sua_senha',
+    'dashboard_password' => 'sua_senha_do_dashboard',
+    'cookie_secret'      => 'uma_string_aleatoria_longa_32_chars',
+];
