@@ -45,10 +45,10 @@ try {
             echo json_encode(['ok' => true]);
         } catch (Throwable $e2) {
             http_response_code(500);
-            echo json_encode(['error' => 'Erro ao salvar pageview']);
+            echo json_encode(['error' => 'Erro ao salvar pageview', 'message' => $e2->getMessage()]);
         }
     } else {
         http_response_code(500);
-        echo json_encode(['error' => 'Erro ao salvar pageview']);
+        echo json_encode(['error' => 'Erro ao salvar pageview', 'message' => $e->getMessage()]);
     }
 }

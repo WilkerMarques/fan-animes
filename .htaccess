@@ -1,0 +1,5 @@
+# Bloquear acesso a .git
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule ^\.git - [F]
+</IfModule>
