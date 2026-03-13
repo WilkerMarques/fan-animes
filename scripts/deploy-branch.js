@@ -11,6 +11,9 @@ const root = path.resolve(__dirname, '..');
 const stagingDir = path.join(root, '.deploy-staging');
 let didStash = false;
 let returnToBranch = 'main';
+let didBackupConfig = false;
+const configLocalPath = path.join(root, 'hostgator', 'api', 'config.local.php');
+const configLocalBackup = path.join(root, '.config.local.php.deploy-backup');
 
 function run(cmd, opts = {}) {
   console.log('>', cmd);
@@ -113,20 +116,23 @@ try {
   }
   // .gitignore no deploy para git add -A não pegar node_modules/build/.deploy-staging
   fs.writeFileSync(path.join(stagingDir, '.gitignore'), 'node_modules\nbuild\n.deploy-staging\n', 'utf8');
-  // .htaccess na raiz: nega acesso à pasta .git (segurança; no cPanel ajuste permissão .git para 755 se der AH00529)
+  // .htaccess na raiz: bloquear .git + React/SPA routing (fallback para index.html)
   const rootHtaccess = [
-    '# Bloquear acesso a .git',
-    '<IfModule mod_rewrite.c>',
+    '# Bloquear acesso ao .git',
+    '',
     'RewriteEngine On',
     'RewriteRule ^\\.git - [F]',
-    '</IfModule>',
+    '',
+    '# React / SPA routing',
+    'RewriteBase /',
+    'RewriteRule ^index\\.html$ - [L]',
+    'RewriteCond %{REQUEST_FILENAME} !-f',
+    'RewriteCond %{REQUEST_FILENAME} !-d',
+    'RewriteRule . /index.html [L]',
   ].join('\n');
   fs.writeFileSync(path.join(stagingDir, '.htaccess'), rootHtaccess, 'utf8');
 
   // Backup config.local.php (está no .gitignore e não entra no stash; sem isso some ao trocar de branch)
-  const configLocalPath = path.join(root, 'hostgator', 'api', 'config.local.php');
-  const configLocalBackup = path.join(root, '.config.local.php.deploy-backup');
-  let didBackupConfig = false;
   if (fs.existsSync(configLocalPath)) {
     fs.copyFileSync(configLocalPath, configLocalBackup);
     didBackupConfig = true;
