@@ -1,5 +1,11 @@
-# Bloquear acesso a .git
-<IfModule mod_rewrite.c>
+# Bloquear acesso ao .git
+
 RewriteEngine On
 RewriteRule ^\.git - [F]
-</IfModule>
+
+# React / SPA routing
+RewriteBase /
+RewriteRule ^index\.html$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.html [L]
