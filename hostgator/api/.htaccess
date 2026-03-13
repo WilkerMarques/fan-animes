@@ -1,0 +1,10 @@
+RewriteEngine On
+RewriteBase /api/
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^login$ login.php [L]
+RewriteRule ^logout$ logout.php [L]
+RewriteRule ^dashboard-clicks$ dashboard-clicks.php [L]
+RewriteRule ^dashboard-pageviews$ dashboard-pageviews.php [L]
+RewriteRule ^save-click$ save-click.php [L]
+RewriteRule ^save-pageview$ save-pageview.php [L]

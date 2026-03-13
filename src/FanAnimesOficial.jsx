@@ -27,11 +27,16 @@ const CONFIG = {
 };
 
 // ============================================================
-// API HELPERS
+// API HELPERS (em dev use REACT_APP_API_URL no .env.local para apontar ao HostGator)
 // ============================================================
+const API_BASE = (process.env.REACT_APP_API_URL || "").trim();
+if (typeof window !== "undefined" && !API_BASE && window.location.port) {
+  console.warn("[FanAnimes] REACT_APP_API_URL não definido. Requisições vão para o mesmo host. Para dev local, crie .env.local na raiz com: REACT_APP_API_URL=https://sua-url-hostgator");
+}
+
 async function saveClick({ label, platform }) {
   try {
-    await fetch("/api/save-click", {
+    await fetch(`${API_BASE}/api/save-click`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -48,7 +53,7 @@ async function saveClick({ label, platform }) {
 }
 
 async function fetchClicks() {
-  const res = await fetch("/api/dashboard-clicks", {
+  const res = await fetch(`${API_BASE}/api/dashboard-clicks`, {
     method: "GET",
     credentials: "include",
   });
@@ -67,7 +72,7 @@ async function fetchClicks() {
 
 async function savePageview({ page }) {
   try {
-    await fetch("/api/save-pageview", {
+    await fetch(`${API_BASE}/api/save-pageview`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -83,7 +88,7 @@ async function savePageview({ page }) {
 }
 
 async function fetchPageviews() {
-  const res = await fetch("/api/dashboard-pageviews", {
+  const res = await fetch(`${API_BASE}/api/dashboard-pageviews`, {
     method: "GET",
     credentials: "include",
   });
@@ -101,7 +106,7 @@ async function fetchPageviews() {
 }
 
 async function loginDashboard(password) {
-  const res = await fetch("/api/login", {
+  const res = await fetch(`${API_BASE}/api/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -110,16 +115,18 @@ async function loginDashboard(password) {
     body: JSON.stringify({ password }),
   });
 
-  if (!res.ok) {
-    return false;
+  if (res.status === 404) {
+    return { error: "api_not_found" };
   }
-
-  return true;
+  if (!res.ok) {
+    return { error: "invalid" };
+  }
+  return { ok: true };
 }
 
 async function logoutDashboard() {
   try {
-    await fetch("/api/logout", {
+    await fetch(`${API_BASE}/api/logout`, {
       method: "POST",
       credentials: "include",
     });
@@ -263,37 +270,55 @@ function Dashboard({ onExit }) {
     loadDashboardData(true);
   }, [loadDashboardData]);
 
+  const todayStartMs = (() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  })();
+
   const rangeClicks =
     rangeDays === "all"
       ? clicks
-      : clicks.filter((c) => {
-          const t = new Date(c.clicked_at).getTime();
-          if (!Number.isFinite(t)) return false;
-          return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
-        });
+      : rangeDays === "today"
+        ? clicks.filter((c) => {
+            const t = new Date(c.clicked_at).getTime();
+            return Number.isFinite(t) && t >= todayStartMs;
+          })
+        : clicks.filter((c) => {
+            const t = new Date(c.clicked_at).getTime();
+            if (!Number.isFinite(t)) return false;
+            return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
+          });
 
   const filtered = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
 
   const rangePageviews =
     rangeDays === "all"
       ? pageviews
-      : pageviews.filter((p) => {
-          const t = new Date(p.viewed_at).getTime();
-          if (!Number.isFinite(t)) return false;
-          return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
-        });
+      : rangeDays === "today"
+        ? pageviews.filter((p) => {
+            const t = new Date(p.viewed_at).getTime();
+            return Number.isFinite(t) && t >= todayStartMs;
+          })
+        : pageviews.filter((p) => {
+            const t = new Date(p.viewed_at).getTime();
+            if (!Number.isFinite(t)) return false;
+            return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
+          });
 
   const homeViews = rangePageviews.filter((p) => p.page === "home").length;
-
-  const totals = CONFIG.links.reduce((acc, l) => {
-    acc[l.label] = rangeClicks.filter((c) => c.label === l.label).length;
-    return acc;
-  }, {});
 
   const byPlatform = ["spotify", "youtube", "instagram"].map((p) => ({
     name: p,
     count: rangeClicks.filter((c) => c.platform === p).length,
   }));
+
+  const totalCliques = byPlatform.reduce((s, p) => s + p.count, 0);
+
+  const totals = CONFIG.links.reduce((acc, l) => {
+    acc[l.label] = rangeClicks.filter((c) => c.label === l.label).length;
+    return acc;
+  }, {});
 
   const byDevice = {
     mobile: rangeClicks.filter((c) => c.device === "mobile").length,
@@ -363,6 +388,7 @@ function Dashboard({ onExit }) {
             <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
               {[
                 { id: "all", label: "Total" },
+                { id: "today", label: "Hoje" },
                 { id: 7, label: "7 dias" },
                 { id: 14, label: "14 dias" },
                 { id: 28, label: "28 dias" },
@@ -385,38 +411,39 @@ function Dashboard({ onExit }) {
               ))}
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 28 }}>
-              {[
-                { label: "Total Cliques", value: rangeClicks.length, color: "#00d4ff" },
-                { label: "Home Views", value: homeViews, color: "#f59e0b" },
-                { label: "Mobile", value: byDevice.mobile, color: "#a855f7" },
-                { label: "Desktop", value: byDevice.desktop, color: "#1DB954" },
-              ].map((c) => (
-                <div
-                  key={c.label}
-                  style={{
-                    background: "rgba(255,255,255,0.04)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: 12,
-                    padding: "16px 12px",
-                    textAlign: "center",
-                  }}
-                >
-                  <div style={{ fontSize: "1.6rem", fontWeight: 700, color: c.color, fontFamily: "'Orbitron',monospace" }}>
-                    {c.value}
-                  </div>
-                  <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>
-                    {c.label}
-                  </div>
-                </div>
-              ))}
+            {/* Grid unificado: todas as linhas com 6 colunas, cards alinhados */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 12 }}>
+              <div style={{ gridColumn: "1 / 4", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#00d4ff", fontFamily: "'Orbitron',monospace" }}>{totalCliques}</div>
+                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Total Cliques</div>
+              </div>
+              <div style={{ gridColumn: "4 / 7", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#f59e0b", fontFamily: "'Orbitron',monospace" }}>{homeViews}</div>
+                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Home</div>
+              </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 28 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 12 }}>
+              <div style={{ gridColumn: "1 / 4", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#a855f7", fontFamily: "'Orbitron',monospace" }}>{byDevice.mobile}</div>
+                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Mobile</div>
+              </div>
+              <div style={{ gridColumn: "4 / 7", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#1DB954", fontFamily: "'Orbitron',monospace" }}>{byDevice.desktop}</div>
+                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Desktop</div>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 28 }}>
               {byPlatform.map((p) => (
                 <div
                   key={p.name}
                   style={{
+                    gridColumn: "span 2",
+                    minHeight: 72,
+                    display: "flex",
+                    flexDirection: "column",
+                    justifyContent: "center",
                     background: "rgba(255,255,255,0.04)",
                     border: "1px solid rgba(255,255,255,0.08)",
                     borderRadius: 12,
@@ -464,7 +491,7 @@ function Dashboard({ onExit }) {
               </div>
 
               {CONFIG.links.map((l) => {
-                const source = filter === "all" ? clicks : clicks.filter((c) => c.platform === filter);
+                const source = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
                 const count = source.filter((c) => c.label === l.label).length;
                 const pct = maxCount > 0 ? (count / maxCount) * 100 : 0;
                 const col = l.icon === "spotify" ? "#1DB954" : l.icon === "youtube" ? "#FF0000" : "#E1306C";
@@ -545,24 +572,33 @@ function Login({ onLogin }) {
   const [err, setErr] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [apiError, setApiError] = useState(null);
+
   const submit = async () => {
     if (!pass || loading) return;
 
     setLoading(true);
+    setApiError(null);
 
     try {
-      const ok = await loginDashboard(pass);
+      const result = await loginDashboard(pass);
 
-      if (ok) {
+      if (result && result.ok) {
         onLogin();
       } else {
         setErr(true);
-        setTimeout(() => setErr(false), 1500);
+        if (result && result.error === "api_not_found") {
+          setApiError("API não encontrada. Em localhost? Adicione REACT_APP_API_URL no .env.local apontando à URL do seu site no HostGator.");
+        } else {
+          setApiError("Senha incorreta. Use a senha definida em api/config.local.php no servidor.");
+        }
+        setTimeout(() => { setErr(false); setApiError(null); }, 4000);
       }
     } catch (error) {
       console.error(error);
       setErr(true);
-      setTimeout(() => setErr(false), 1500);
+      setApiError("Erro de conexão. Confira a URL em REACT_APP_API_URL (desenvolvimento) ou acesse o site no HostGator.");
+      setTimeout(() => { setErr(false); setApiError(null); }, 4000);
     } finally {
       setLoading(false);
     }
@@ -598,6 +634,12 @@ function Login({ onLogin }) {
             transition: "border 0.2s",
           }}
         />
+
+        {apiError && (
+          <div style={{ fontSize: "0.7rem", color: "#ff9f9f", marginBottom: 12, textAlign: "left", lineHeight: 1.3 }}>
+            {apiError}
+          </div>
+        )}
 
         <button
           onClick={submit}
