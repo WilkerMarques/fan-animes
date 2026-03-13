@@ -1,4 +1,5 @@
 <?php
+require_once __DIR__ . '/_lib/cors.php';
 require_once __DIR__ . '/config.php';
 
 header('Content-Type: application/json');
@@ -17,9 +18,15 @@ if (!$pdo) {
 }
 
 $body = json_decode(file_get_contents('php://input'), true) ?: [];
-$page = isset($body['page']) ? (string) $body['page'] : 'home';
-$device = isset($body['device']) ? (string) $body['device'] : 'desktop';
-$source = isset($body['source']) ? (string) $body['source'] : null;
+$page = isset($body['page']) ? trim((string) $body['page']) : 'home';
+if ($page === '') {
+    $page = 'home';
+}
+$device = isset($body['device']) ? trim((string) $body['device']) : 'desktop';
+$source = isset($body['source']) ? trim((string) $body['source']) : null;
+if ($source === '') {
+    $source = null;
+}
 
 try {
     $stmt = $pdo->prepare("INSERT INTO pageviews (page, device, source) VALUES (?, ?, ?)");
