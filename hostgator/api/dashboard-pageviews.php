@@ -25,7 +25,7 @@ if (!$pdo) {
 }
 
 try {
-    $stmt = $pdo->query("SELECT page, device, source, viewed_at FROM pageviews ORDER BY viewed_at DESC LIMIT 5000");
+    $stmt = $pdo->query("SELECT page, device, source, viewed_at FROM pageviews ORDER BY viewed_at DESC LIMIT 100000");
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
         if (isset($r['viewed_at'])) {

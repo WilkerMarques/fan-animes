@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     }
 
     const response = await fetch(
-      `${supabaseUrl}/rest/v1/clicks?select=*&order=clicked_at.desc&limit=1000`,
+      `${supabaseUrl}/rest/v1/clicks?select=*&order=clicked_at.desc&limit=100000`,
       {
         method: "GET",
         headers: {

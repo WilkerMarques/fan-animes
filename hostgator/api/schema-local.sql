@@ -4,7 +4,7 @@
 CREATE TABLE IF NOT EXISTS clicks (
   id INT AUTO_INCREMENT PRIMARY KEY,
   label VARCHAR(255) NOT NULL,
-  platform ENUM('spotify', 'youtube', 'instagram', '') NOT NULL DEFAULT '',
+  platform ENUM('spotify', 'youtube', 'instagram', 'tiktok', '') NOT NULL DEFAULT '',
   device ENUM('mobile', 'desktop') NOT NULL DEFAULT 'desktop',
   source VARCHAR(255) NULL,
   clicked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -25,7 +25,7 @@ if (!$pdo) {
 }
 
 try {
-    $stmt = $pdo->query("SELECT label, platform, device, source, clicked_at FROM clicks ORDER BY clicked_at DESC LIMIT 5000");
+    $stmt = $pdo->query("SELECT label, platform, device, source, clicked_at FROM clicks ORDER BY clicked_at DESC LIMIT 100000");
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as &$r) {
         if (isset($r['clicked_at'])) {
