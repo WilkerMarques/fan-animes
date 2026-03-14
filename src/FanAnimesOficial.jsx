@@ -487,35 +487,34 @@ function Dashboard({ onExit }) {
               ))}
             </div>
 
-            {/* Grid unificado: todas as linhas com 6 colunas, cards alinhados */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 12 }}>
-              <div style={{ gridColumn: "1 / 4", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+            {/* Grid 4 linhas × 2 colunas: Total/Home, Mobile/Desktop, Spotify/Youtube, Instagram/Tiktok */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 12 }}>
+              <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#00d4ff", fontFamily: "'Orbitron',monospace" }}>{totalCliques}</div>
                 <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Total Cliques</div>
               </div>
-              <div style={{ gridColumn: "4 / 7", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+              <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#f59e0b", fontFamily: "'Orbitron',monospace" }}>{homeViews}</div>
                 <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Home</div>
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 12 }}>
-              <div style={{ gridColumn: "1 / 4", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 12 }}>
+              <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#a855f7", fontFamily: "'Orbitron',monospace" }}>{byDevice.mobile}</div>
                 <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Mobile</div>
               </div>
-              <div style={{ gridColumn: "4 / 7", minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
+              <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#1DB954", fontFamily: "'Orbitron',monospace" }}>{byDevice.desktop}</div>
                 <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Desktop</div>
               </div>
             </div>
 
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 12, marginBottom: 28 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 28 }}>
               {byPlatform.map((p) => (
                 <div
                   key={p.name}
                   style={{
-                    gridColumn: "span 2",
                     minHeight: 72,
                     display: "flex",
                     flexDirection: "column",
