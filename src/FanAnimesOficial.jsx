@@ -127,6 +127,25 @@ async function fetchClicks() {
   return { unauthorized: false, data };
 }
 
+// Normaliza resposta da API: pode ser { rows, daily } ou array (legado)
+function normalizeClicksData(data) {
+  if (!data) return { rows: [], daily: [] };
+  if (Array.isArray(data)) return { rows: data, daily: [] };
+  return {
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    daily: Array.isArray(data.daily) ? data.daily : [],
+  };
+}
+
+function normalizePageviewsData(data) {
+  if (!data) return { rows: [], daily: [] };
+  if (Array.isArray(data)) return { rows: data, daily: [] };
+  return {
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    daily: Array.isArray(data.daily) ? data.daily : [],
+  };
+}
+
 async function savePageview({ page }) {
   try {
     await fetch(`${API_BASE}/api/save-pageview`, {
@@ -297,8 +316,8 @@ function Dashboard({ onExit }) {
       return;
     }
 
-    setClicks(Array.isArray(clicksResult.data) ? clicksResult.data : []);
-    setPageviews(Array.isArray(pageviewsResult.data) ? pageviewsResult.data : []);
+    setClicks(normalizeClicksData(clicksResult.data));
+    setPageviews(normalizePageviewsData(pageviewsResult.data));
 
     if (showRefreshing) setRefreshing(false);
   }, [onExit]);
@@ -336,11 +355,19 @@ function Dashboard({ onExit }) {
     return d.getTime();
   })();
 
+  const toDateStr = (date) => date.toISOString().slice(0, 10);
+  const todayStr = toDateStr(new Date());
+
+  const clicksRows = clicks?.rows ?? (Array.isArray(clicks) ? clicks : []);
+  const clicksDaily = clicks?.daily ?? [];
+  const pageviewsRows = pageviews?.rows ?? (Array.isArray(pageviews) ? pageviews : []);
+  const pageviewsDaily = pageviews?.daily ?? [];
+
   const bySource = (list, sourceKey) =>
     sourceFilter === "all" ? list : list.filter((x) => (x[sourceKey] || "").toLowerCase() === sourceFilter);
 
-  const clicksBySource = bySource(clicks, "source");
-  const pageviewsBySource = bySource(pageviews, "source");
+  const clicksBySource = bySource(clicksRows, "source");
+  const pageviewsBySource = bySource(pageviewsRows, "source");
 
   const rangeClicks =
     rangeDays === "all"
@@ -372,14 +399,97 @@ function Dashboard({ onExit }) {
             return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
           });
 
-  const homeViews = rangePageviews.filter((p) => p.page === "home").length;
+  // Soma dos totais das tabelas daily no período (só dias passados; hoje está em rows)
+  const sumDailyInRange = (dailyList, rangeDaysVal) => {
+    if (!dailyList.length) return 0;
+    if (rangeDaysVal === "today") return 0;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    if (rangeDaysVal === "all") {
+      return dailyList.reduce((s, d) => s + (Number(d.total_count) || 0), 0);
+    }
+    const n = Number(rangeDaysVal) || 7;
+    const start = new Date(today);
+    start.setDate(start.getDate() - (n - 1));
+    const startStr = toDateStr(start);
+    return dailyList.reduce((s, d) => {
+      const date = d.date ? String(d.date).slice(0, 10) : "";
+      if (date >= startStr && date < todayStr) return s + (Number(d.total_count) || 0);
+      return s;
+    }, 0);
+  };
+
+  const dailyClicksInRange = sumDailyInRange(clicksDaily, rangeDays);
+  const dailyPageviewsInRange = sumDailyInRange(pageviewsDaily, rangeDays);
+
+  // Soma do histórico daily de cliques por source (para filtro Facebook/TikTok)
+  const sumDailyClicksBySourceInRange = (dailyList, rangeDaysVal, source) => {
+    if (!dailyList.length) return 0;
+    if (rangeDaysVal === "today") return 0;
+    const src = (source || "").toLowerCase();
+    const inRange = isDailyDateInRange(rangeDaysVal);
+    return dailyList
+      .filter((d) => (d.source || "").toLowerCase() === src && inRange(d))
+      .reduce((s, d) => s + (Number(d.total_count) || 0), 0);
+  };
+
+  // Helper: retorna true se a data do registro daily está no período (rangeDaysVal)
+  const isDailyDateInRange = (rangeDaysVal) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayStr = toDateStr(today);
+    return (d) => {
+      const date = d.date ? String(d.date).slice(0, 10) : "";
+      if (rangeDaysVal === "today") return false;
+      if (rangeDaysVal === "all") return date < todayStr;
+      const n = Number(rangeDaysVal) || 7;
+      const start = new Date(today);
+      start.setDate(start.getDate() - (n - 1));
+      const startStr = toDateStr(start);
+      return date >= startStr && date < todayStr;
+    };
+  };
+
+  // Soma do histórico daily por source (pageviews_daily: date + source) — para filtro Facebook/TikTok
+  const sumDailyBySourceInRange = (dailyList, rangeDaysVal, source) => {
+    if (!dailyList.length) return 0;
+    if (rangeDaysVal === "today") return 0;
+    const src = (source || "").toLowerCase();
+    const inRange = isDailyDateInRange(rangeDaysVal);
+    return dailyList
+      .filter((d) => (d.source || "").toLowerCase() === src && inRange(d))
+      .reduce((s, d) => s + (Number(d.total_count) || 0), 0);
+  };
+
+  // Soma do histórico daily por plataforma (e opcionalmente por source quando filtro Facebook/TikTok)
+  const sumDailyByPlatformInRange = (dailyList, rangeDaysVal, platform, sourceFilter) => {
+    if (!dailyList.length) return 0;
+    if (rangeDaysVal === "today") return 0;
+    const inRange = isDailyDateInRange(rangeDaysVal);
+    const src = sourceFilter && sourceFilter !== "all" ? (sourceFilter || "").toLowerCase() : null;
+    return dailyList
+      .filter((d) => {
+        if ((d.platform || "") !== platform) return false;
+        if (src !== null && (d.source || "").toLowerCase() !== src) return false;
+        return inRange(d);
+      })
+      .reduce((s, d) => s + (Number(d.total_count) || 0), 0);
+  };
 
   const byPlatform = ["spotify", "youtube", "instagram", "tiktok"].map((p) => ({
     name: p,
-    count: rangeClicks.filter((c) => c.platform === p).length,
+    count: sumDailyByPlatformInRange(clicksDaily, rangeDays, p, sourceFilter) + rangeClicks.filter((c) => c.platform === p).length,
   }));
 
-  const totalCliques = byPlatform.reduce((s, p) => s + p.count, 0);
+  const totalCliques =
+    sourceFilter === "all"
+      ? dailyClicksInRange + rangeClicks.length
+      : sumDailyClicksBySourceInRange(clicksDaily, rangeDays, sourceFilter) + rangeClicks.length;
+  // Pageviews: quando filtro Facebook/TikTok, somar só daily dessa origem + registros recentes já filtrados
+  const totalPageviews =
+    sourceFilter === "all"
+      ? dailyPageviewsInRange + rangePageviews.length
+      : sumDailyBySourceInRange(pageviewsDaily, rangeDays, sourceFilter) + rangePageviews.length;
 
   // Para "CLIQUES POR LINK": filtrar cliques E a lista de links pela plataforma (quando não for "Todos")
   const clicksForLinksSection = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
@@ -389,11 +499,6 @@ function Dashboard({ onExit }) {
     clicksForLinksSection.filter((c) => c.label === l.label && c.platform === l.icon).length
   );
   const maxCountForLinksSection = Math.max(...totalsPerLinkForSection, 1);
-
-  const byDevice = {
-    mobile: rangeClicks.filter((c) => c.device === "mobile").length,
-    desktop: rangeClicks.filter((c) => c.device === "desktop").length,
-  };
 
   const handleLogout = async () => {
     await logoutDashboard();
@@ -503,26 +608,15 @@ function Dashboard({ onExit }) {
               ))}
             </div>
 
-            {/* Grid 4 linhas × 2 colunas: Total/Home, Mobile/Desktop, Spotify/Youtube, Instagram/Tiktok */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 12 }}>
+            {/* Grid: Total Cliques e Pageviews (incluem histórico das tabelas daily + registros recentes) */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 8 }}>
               <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
                 <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#00d4ff", fontFamily: "'Orbitron',monospace" }}>{totalCliques}</div>
                 <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Total Cliques</div>
               </div>
               <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#f59e0b", fontFamily: "'Orbitron',monospace" }}>{homeViews}</div>
-                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Home</div>
-              </div>
-            </div>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 12, marginBottom: 12 }}>
-              <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#a855f7", fontFamily: "'Orbitron',monospace" }}>{byDevice.mobile}</div>
-                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Mobile</div>
-              </div>
-              <div style={{ minHeight: 72, display: "flex", flexDirection: "column", justifyContent: "center", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 12, padding: "16px 12px", textAlign: "center" }}>
-                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#1DB954", fontFamily: "'Orbitron',monospace" }}>{byDevice.desktop}</div>
-                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Desktop</div>
+                <div style={{ fontSize: "1.6rem", fontWeight: 700, color: "#f59e0b", fontFamily: "'Orbitron',monospace" }}>{totalPageviews}</div>
+                <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4 }}>Pageviews</div>
               </div>
             </div>
 

@@ -1,7 +1,18 @@
--- Schema do banco para desenvolvimento local (compatível com a API PHP)
--- Criar um banco (ex: fan_animes_local) e importar este arquivo.
+-- ============================================================
+-- RECRIAR BANCO DO ZERO (local e servidor)
+-- Rode este arquivo para apagar as tabelas e criar de novo.
+-- Use para começar limpo e testar a partir de amanhã.
+-- ============================================================
 
-CREATE TABLE IF NOT EXISTS clicks (
+-- 1) Apagar tabelas (ordem: daily primeiro, depois as que recebem inserts)
+DROP TABLE IF EXISTS pageviews_daily;
+DROP TABLE IF EXISTS clicks_daily;
+DROP TABLE IF EXISTS pageviews;
+DROP TABLE IF EXISTS clicks;
+
+-- 2) Criar tabelas na estrutura final
+
+CREATE TABLE clicks (
   id INT AUTO_INCREMENT PRIMARY KEY,
   label VARCHAR(255) NOT NULL,
   platform ENUM('spotify', 'youtube', 'instagram', 'tiktok', '') NOT NULL DEFAULT '',
@@ -12,7 +23,7 @@ CREATE TABLE IF NOT EXISTS clicks (
   INDEX idx_source (source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE IF NOT EXISTS pageviews (
+CREATE TABLE pageviews (
   id INT AUTO_INCREMENT PRIMARY KEY,
   page VARCHAR(255) NOT NULL DEFAULT 'home',
   device ENUM('mobile', 'desktop') NOT NULL DEFAULT 'desktop',
@@ -22,8 +33,7 @@ CREATE TABLE IF NOT EXISTS pageviews (
   INDEX idx_source (source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Tabelas opcionais (agregados diários por plataforma e origem; cron preenche)
-CREATE TABLE IF NOT EXISTS clicks_daily (
+CREATE TABLE clicks_daily (
   id INT AUTO_INCREMENT PRIMARY KEY,
   date DATE NOT NULL,
   platform VARCHAR(20) NOT NULL DEFAULT '',
@@ -32,8 +42,7 @@ CREATE TABLE IF NOT EXISTS clicks_daily (
   UNIQUE KEY uk_date_platform_source (date, platform, source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
--- Agregados diários por origem do tráfego (facebook, tiktok, etc.); cron preenche
-CREATE TABLE IF NOT EXISTS pageviews_daily (
+CREATE TABLE pageviews_daily (
   id INT AUTO_INCREMENT PRIMARY KEY,
   date DATE NOT NULL,
   source VARCHAR(255) NOT NULL DEFAULT '',
