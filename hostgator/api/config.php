@@ -8,6 +8,10 @@ $config = [
     'db_password' => '',
     'dashboard_password' => '',
     'cookie_secret' => '',
+    // Pix (copia e cola dinâmico) – preencha em config.local.php
+    'pix_chave_aleatoria' => '',
+    'pix_receiver_name'   => 'Fan Animes',
+    'pix_receiver_city'   => 'Sao Paulo',
 ];
 
 if (is_file(__DIR__ . '/config.local.php')) {

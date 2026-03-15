@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import QRCode from "qrcode";
 
 // ============================================================
 // 🔧 CONFIGURAÇÃO
@@ -24,6 +25,21 @@ const CONFIG = {
   socials: [
     { icon: "spotify", url: "https://open.spotify.com/playlist/2jE5C8SoYWX1SB0C0IoLBB?si=a87f8fc1f6054816" },
     { icon: "youtube", url: "https://www.youtube.com/@faananimes" },
+  ],
+  // Card "Apoie o Fan Animes" – substitua pixQrUrl pela imagem real do seu Pix
+  supportPixQrUrl: "", // ex: "/pix-qr.png" ou URL da imagem do QR Code Pix
+  supportPills: [
+    { label: "R$ 5", url: "" },
+    { label: "R$ 10", url: "" },
+    { label: "R$ 20", url: "" },
+    { label: "Outro valor", url: "" },
+  ],
+  // Imagens em public/loja/ (camiseta.png, moleton.png, funkopop.png, quadro.png)
+  lojaProducts: [
+    { title: "Moletom", url: "https://meli.la/31guCbw", image: `${process.env.PUBLIC_URL || ""}/loja/moleton.png` },
+    { title: "Camiseta", url: "https://meli.la/13eaovN", image: `${process.env.PUBLIC_URL || ""}/loja/camiseta.png` },
+    { title: "Funko Pop", url: "https://meli.la/1ymUDop", image: `${process.env.PUBLIC_URL || ""}/loja/funkopop.png` },
+    { title: "Quadro", url: "https://meli.la/2TF6m93", image: `${process.env.PUBLIC_URL || ""}/loja/quadro.png` },
   ],
 };
 
@@ -791,9 +807,68 @@ export default function App() {
 function FanAnimesPage({ onFooterTap }) {
   const { fireClickButton } = usePixels();
   const [clicked, setClicked] = useState(null);
+  const [showSupport, setShowSupport] = useState(false);
+  const [showLoja, setShowLoja] = useState(false);
+  const [lojaImageErrors, setLojaImageErrors] = useState({});
+  const [, setSupportAmount] = useState(null);
+  const [pixCopiaCola, setPixCopiaCola] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportError, setSupportError] = useState("");
+  const [showOutroInput, setShowOutroInput] = useState(false);
+  const [outroValor, setOutroValor] = useState("");
+  const [copyFeedback, setCopyFeedback] = useState(false);
+  const supportRequestValorRef = useRef(null);
 
   useEffect(() => {
     savePageview({ page: "home" });
+  }, []);
+
+  // Ao fechar o modal Loja, limpa erros de imagem para tentar de novo ao reabrir
+  useEffect(() => {
+    if (!showLoja) setLojaImageErrors({});
+  }, [showLoja]);
+
+  // Ao abrir o modal Apoie, reseta tudo: campo outro valor, QR, copiar e valor selecionado
+  useEffect(() => {
+    if (showSupport) {
+      setShowOutroInput(false);
+      setOutroValor("");
+      setPixCopiaCola("");
+      setQrDataUrl("");
+      setSupportAmount(null);
+      setSupportError("");
+      setSupportLoading(false);
+    }
+  }, [showSupport]);
+
+  // Título e favicon da aba: Fan Animes + mesma logo do meio (circular)
+  useEffect(() => {
+    document.title = "Fan Animes";
+    const link = document.querySelector("link[rel*='icon']");
+    if (!link || !CONFIG.avatarUrl) return;
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const size = 64;
+      const canvas = document.createElement("canvas");
+      canvas.width = size;
+      canvas.height = size;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.beginPath();
+      ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, 0, 0, size, size);
+      try {
+        link.href = canvas.toDataURL("image/png");
+      } catch (_) {
+        link.href = CONFIG.avatarUrl;
+      }
+    };
+    img.onerror = () => { link.href = CONFIG.avatarUrl; };
+    img.src = CONFIG.avatarUrl;
   }, []);
 
   const isYouTube = (icon, url) =>
@@ -801,7 +876,8 @@ function FanAnimesPage({ onFooterTap }) {
 
   const handleClick = (link) => {
     setClicked(link.id);
-    if (!isYouTube(link.icon, link.url)) {
+    const isFanAnimesRapSpotify = link.id === 4; // Fan Animes Rap Spotify não aciona pixel
+    if (!isYouTube(link.icon, link.url) && !isFanAnimesRapSpotify) {
       fireClickButton(link.label, link.icon);
     }
     saveClick({ label: link.label, platform: link.icon });
@@ -813,10 +889,67 @@ function FanAnimesPage({ onFooterTap }) {
   };
 
   const handleSocialClick = (s) => {
-    if (!isYouTube(s.icon, s.url)) {
-      fireClickButton(`social_${s.icon}`, s.icon);
-    }
+    // Ícone do YouTube (e outros socials) não acionam pixel
     saveClick({ label: `social_${s.icon}`, platform: s.icon });
+  };
+
+  const fetchPixCopiaCola = useCallback(async (valor) => {
+    const v = Number(valor);
+    if (!Number.isFinite(v) || v <= 0) return;
+    supportRequestValorRef.current = v;
+    setSupportLoading(true);
+    setSupportError("");
+    try {
+      const res = await fetch(`${API_BASE}/api/pix-copia-cola?valor=${encodeURIComponent(v)}`);
+      const data = await res.json().catch(() => ({}));
+      if (supportRequestValorRef.current !== v) return;
+      if (!res.ok || data.error) {
+        setSupportError(data.error || "Não foi possível gerar o Pix. Configure o backend.");
+        return;
+      }
+      const copia = (data.copiaCola || data.copia_cola || "").trim();
+      if (!copia) {
+        setSupportError("Resposta inválida do servidor.");
+        return;
+      }
+      setPixCopiaCola(copia);
+      const url = await QRCode.toDataURL(copia, { width: 256, margin: 1 });
+      if (supportRequestValorRef.current !== v) return;
+      setQrDataUrl(url);
+    } catch (e) {
+      if (supportRequestValorRef.current !== v) return;
+      setSupportError("Erro ao conectar. Verifique a API.");
+    } finally {
+      if (supportRequestValorRef.current === v) setSupportLoading(false);
+    }
+  }, []);
+
+  const handleSupportAmount = (valor) => {
+    if (valor === "outro") {
+      setShowOutroInput(true);
+      setSupportAmount(null);
+      return;
+    }
+    setShowOutroInput(false);
+    setSupportAmount(valor);
+    fetchPixCopiaCola(valor);
+  };
+
+  const handleOutroValorSubmit = () => {
+    const v = outroValor.replace(",", ".").trim();
+    const num = parseFloat(v);
+    if (!Number.isFinite(num) || num <= 0) return;
+    setSupportAmount(num);
+    fetchPixCopiaCola(num);
+  };
+
+  const copyPixToClipboard = async () => {
+    if (!pixCopiaCola) return;
+    try {
+      await navigator.clipboard.writeText(pixCopiaCola);
+      setCopyFeedback(true);
+      setTimeout(() => setCopyFeedback(false), 2000);
+    } catch (_) {}
   };
 
   const particles = Array.from({ length: 18 }, (_, i) => ({
@@ -871,6 +1004,70 @@ function FanAnimesPage({ onFooterTap }) {
         .footer{margin-top:48px;text-align:center;font-size:0.7rem;color:#1e3040;letter-spacing:0.05em;cursor:default}
         @keyframes fadeSlideIn{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
         .animate-in{animation:fadeSlideIn 0.5s ease forwards}
+        .support-overlay{position:fixed;inset:0;z-index:9998;background:rgba(8,11,16,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+        .support-card{background:linear-gradient(180deg,#0d1f3c 0%,#080b10 100%);border:1px solid rgba(29,185,84,0.25);border-radius:20px;padding:28px 24px;max-width:320px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(29,185,84,0.1)}
+        .support-heart-wrap{width:56px;height:56px;margin:0 auto 14px;position:relative}
+        .support-heart-ring{position:absolute;inset:-4px;border:2px solid #1DB954;border-radius:50%;animation:supportPulse 2s ease-in-out infinite}
+        .support-heart-inner{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#1DB954;font-size:28px}
+        @keyframes supportPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.7;transform:scale(1.05)}}
+        .support-title{font-family:'Orbitron',monospace;font-weight:900;font-size:1.1rem;color:#fff;text-align:center;margin-bottom:6px}
+        .support-sub{font-size:0.8rem;color:#7a9bbf;text-align:center;line-height:1.45;margin-bottom:20px}
+        .support-qr-wrap{position:relative;width:160px;height:160px;margin:0 auto 12px;background:#fff;border-radius:12px;padding:10px;border:3px solid #1DB954;box-shadow:0 0 0 1px rgba(29,185,84,0.3)}
+        .support-qr-wrap::before,.support-qr-wrap::after{content:'';position:absolute;width:16px;height:16px;border:2px solid #1DB954;border-radius:2px}
+        .support-qr-wrap::before{top:4px;left:4px;border-right:none;border-bottom:none}
+        .support-qr-wrap::after{bottom:4px;right:4px;border-left:none;border-top:none}
+        .support-qr-inner{width:100%;height:100%;min-height:140px;background:repeating-conic-gradient(#000 0% 25%,#fff 0% 50%) 50%/12px 12px;border-radius:6px;display:flex;align-items:center;justify-content:center}
+        .support-qr-placeholder{font-size:0.75rem;color:#4a6a7a;text-align:center;padding:8px}
+        .support-pix-label{display:flex;align-items:center;justify-content:center;gap:6px;font-size:0.8rem;color:#fff;margin-bottom:8px}
+        .support-copy-wrap{display:flex;justify-content:center;width:100%;margin-bottom:16px}
+        .support-copy-btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 20px;background:rgba(13,31,60,0.9);border:2px solid #1DB954;border-radius:999px;color:#fff;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:inherit}
+        .support-copy-btn:hover{background:rgba(29,185,84,0.25);border-color:#1DB954;color:#fff}
+        .support-copy-icon{width:18px;height:18px;flex-shrink:0}
+        .support-error{font-size:0.8rem;color:#ff6b6b;text-align:center;margin-bottom:12px}
+        .support-outro-wrap{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;align-items:center;margin-bottom:16px}
+        .support-outro-input{width:120px;padding:8px 12px;border:1px solid rgba(29,185,84,0.5);border-radius:999px;background:rgba(13,31,60,0.8);color:#fff;font-size:0.9rem;text-align:center}
+        .support-outro-input::placeholder{color:#4a6a7a}
+        .support-outro-btn{margin:0}
+        .support-pix-dot{width:6px;height:6px;background:#1DB954;border-radius:50%;animation:supportBlink 1.2s ease-in-out infinite}
+        @keyframes supportBlink{0%,100%{opacity:1}50%{opacity:0.3}}
+        .support-pills{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-bottom:16px}
+        .support-pill{background:rgba(29,185,84,0.2);border:1px solid rgba(29,185,84,0.5);color:#b8f0c8;padding:8px 16px;border-radius:999px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s;font-family:inherit}
+        .support-pill:hover{background:rgba(29,185,84,0.35);border-color:#1DB954;color:#fff;transform:translateY(-1px)}
+        .support-thanks{font-size:0.8rem;color:#7a9bbf;text-align:center;margin-bottom:4px}
+        .support-final{font-size:0.75rem;color:#4a6a7a;text-align:center}
+        .support-tip{font-size:0.7rem;color:#5a7a8a;text-align:center;margin-top:6px;line-height:1.35}
+        .support-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border:none;background:rgba(255,255,255,0.08);border-radius:50%;color:#7a9bbf;cursor:pointer;font-size:18px;line-height:1;transition:all 0.2s}
+        .support-close:hover{background:rgba(255,255,255,0.15);color:#fff}
+        .support-btn-float{position:fixed;bottom:24px;z-index:9990;display:flex;align-items:center;gap:10px;padding:10px 16px 10px 12px;background:rgba(13,31,60,0.5);backdrop-filter:blur(8px);border:2px solid;border-radius:999px;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,0.3);transition:transform 0.2s,box-shadow 0.2s}
+        .support-btn-float:hover{transform:translateY(-2px);box-shadow:0 6px 24px rgba(0,0,0,0.4)}
+        .support-btn-float:active{transform:translateY(0)}
+        .support-btn-float.right{right:16px;border-color:#ff3e6c}
+        .support-btn-float.right .support-btn-icon,.support-btn-float.right .support-btn-title{color:#ff6b8a}
+        .support-btn-float.right:hover{box-shadow:0 6px 24px rgba(0,0,0,0.4),0 0 16px rgba(255,62,108,0.3)}
+        .support-btn-float.left{left:16px;border-color:#a855f7}
+        .support-btn-float.left .support-btn-icon,.support-btn-float.left .support-btn-title{color:#a855f7}
+        .support-btn-float.left:hover{box-shadow:0 6px 24px rgba(0,0,0,0.4),0 0 16px rgba(168,85,247,0.25)}
+        .support-btn-icon{font-size:22px;line-height:1;display:inline-flex;align-items:center;justify-content:center}
+        .support-btn-icon svg{width:1em;height:1em}
+        .support-btn-title{font-family:'Orbitron',monospace;font-weight:700;font-size:0.9rem}
+        @media (max-width:480px){.support-btn-float{right:auto;bottom:20px;padding:8px 14px 8px 10px;gap:8px}.support-btn-float.right{right:12px}.support-btn-float.left{left:12px}.support-btn-icon{font-size:20px}.support-btn-title{font-size:0.82rem}}
+        .loja-overlay{position:fixed;inset:0;z-index:9998;background:rgba(8,11,16,0.85);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+        .loja-card{background:linear-gradient(180deg,#1a1530 0%,#0d0b18 100%);border:1px solid rgba(168,85,247,0.3);border-radius:20px;padding:24px 20px;max-width:360px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.5),0 0 0 1px rgba(168,85,247,0.1);position:relative;max-height:90vh;overflow-y:auto}
+        .loja-close{position:absolute;top:16px;right:16px;width:32px;height:32px;border:none;background:rgba(255,255,255,0.08);border-radius:50%;color:#7a9bbf;cursor:pointer;font-size:18px;line-height:1;transition:all 0.2s}
+        .loja-close:hover{background:rgba(255,255,255,0.15);color:#fff}
+        .loja-title{font-family:'Orbitron',monospace;font-weight:900;font-size:1.15rem;color:#fff;text-align:center;margin-bottom:4px}
+        .loja-subtitle{font-size:0.9rem;color:#a855f7;text-align:center;margin-bottom:20px}
+        .loja-list{display:flex;flex-direction:column;gap:12px}
+        .loja-product{display:flex;align-items:center;gap:14px;background:rgba(30,30,50,0.8);border:1px solid rgba(168,85,247,0.2);border-radius:14px;padding:14px;transition:all 0.2s}
+        .loja-product:hover{border-color:rgba(168,85,247,0.4);background:rgba(40,38,65,0.9)}
+        .loja-product-icon{width:56px;height:56px;border-radius:12px;background:rgba(168,85,247,0.15);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#a78bfa;overflow:hidden}
+        .loja-product-icon svg{width:26px;height:26px}
+        .loja-product-icon img{width:100%;height:100%;object-fit:cover}
+        .loja-product-text{flex:1;min-width:0}
+        .loja-product-title{font-size:0.95rem;font-weight:600;color:#fff;margin-bottom:2px}
+        .loja-product-desc{font-size:0.78rem;color:#7a9bbf}
+        .loja-product-btn{flex-shrink:0;padding:8px 16px;background:#ff6b35;border:none;border-radius:999px;color:#fff;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s;text-decoration:none;display:inline-block}
+        .loja-product-btn:hover{background:#ff8555;transform:translateY(-1px)}
       `}</style>
 
       <div className="bg-wrap">
@@ -941,6 +1138,144 @@ function FanAnimesPage({ onFooterTap }) {
           <p>© 2026 FanAnimesOficial</p>
         </div>
       </div>
+
+      <button
+        type="button"
+        className="support-btn-float left"
+        aria-label="Loja"
+        onClick={() => setShowLoja(true)}
+      >
+        <span className="support-btn-icon">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M18 6h-2c0-2.2-1.8-4-4-4S8 3.8 8 6H6c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-6-2c1.1 0 2 .9 2 2h-4c0-1.1.9-2 2-2zm6 16H6V8h2v2h2V8h4v2h2V8h2v12z"/>
+          </svg>
+        </span>
+        <span className="support-btn-title">Loja</span>
+      </button>
+
+      <button
+        type="button"
+        className="support-btn-float right"
+        onClick={() => setShowSupport(true)}
+        aria-label="Apoie"
+      >
+        <span className="support-btn-icon">❤</span>
+        <span className="support-btn-title">Apoie</span>
+      </button>
+
+      {showLoja && (
+        <div className="loja-overlay" onClick={() => setShowLoja(false)}>
+          <div className="loja-card" onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="loja-close" onClick={() => setShowLoja(false)} aria-label="Fechar">×</button>
+            <h2 className="loja-title">Loja Fan Animes</h2>
+            <p className="loja-subtitle">Mercado Livre</p>
+            <div className="loja-list">
+              {CONFIG.lojaProducts.map((product, i) => (
+                <div key={i} className="loja-product">
+                  <span className="loja-product-icon" aria-hidden="true">
+                    {product.image && !lojaImageErrors[i] ? (
+                      <img
+                        src={product.image}
+                        alt=""
+                        onError={() => setLojaImageErrors((prev) => ({ ...prev, [i]: true }))}
+                      />
+                    ) : (
+                      <>
+                        {i === 0 && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+                        )}
+                        {i === 1 && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+                        )}
+                        {i === 2 && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 12h12M6 8h12M8 16h8"/><path d="M4 6v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2z"/></svg>
+                        )}
+                        {i === 3 && (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+                        )}
+                      </>
+                    )}
+                  </span>
+                  <div className="loja-product-text">
+                    <div className="loja-product-title">{product.title}</div>
+                    <div className="loja-product-desc">Clique para ver no Mercado Livre</div>
+                  </div>
+                  <a href={product.url} target="_blank" rel="noopener noreferrer" className="loja-product-btn">Ver oferta</a>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showSupport && (
+        <div className="support-overlay" onClick={() => setShowSupport(false)}>
+          <div className="support-card" style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+            <button type="button" className="support-close" onClick={() => setShowSupport(false)} aria-label="Fechar">×</button>
+            <div className="support-heart-wrap">
+              <div className="support-heart-ring" />
+              <div className="support-heart-inner">❤</div>
+            </div>
+            <h2 className="support-title">Apoie Fan Animes</h2>
+            <p className="support-sub">Curte as playlists? Qualquer valor me ajuda a continuar criando conteúdo.</p>
+            <div className="support-qr-wrap">
+              <div className="support-qr-inner">
+                {qrDataUrl && <img src={qrDataUrl} alt="QR Code Pix" style={{ width: "100%", height: "100%", objectFit: "contain", borderRadius: 6 }} />}
+                {!qrDataUrl && supportLoading && <span className="support-qr-placeholder">Carregando...</span>}
+                {!qrDataUrl && !supportLoading && <span className="support-qr-placeholder">Escolha um valor</span>}
+              </div>
+            </div>
+            {(pixCopiaCola || supportLoading) && (
+              <p className="support-pix-label">
+                <span className="support-pix-dot" />
+                Pix disponível – escaneie ou copie o código
+              </p>
+            )}
+            {pixCopiaCola && (
+              <div className="support-copy-wrap">
+                <button type="button" className="support-copy-btn" onClick={copyPixToClipboard} aria-label="Copiar código Pix">
+                  <svg className="support-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                  </svg>
+                  <span>{copyFeedback ? "Copiado!" : "Copiar"}</span>
+                </button>
+              </div>
+            )}
+            {supportError && <p className="support-error">{supportError}</p>}
+            <div className="support-pills">
+              {[5, 10, 20].map((v) => (
+                <button key={v} type="button" className="support-pill" onClick={() => handleSupportAmount(v)}>
+                  R$ {v}
+                </button>
+              ))}
+              <button type="button" className="support-pill" onClick={() => handleSupportAmount("outro")}>
+                Outro valor
+              </button>
+            </div>
+            {showOutroInput && (
+              <div className="support-outro-wrap">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  placeholder="Ex: 15,00"
+                  value={outroValor}
+                  onChange={(e) => setOutroValor(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleOutroValorSubmit()}
+                  className="support-outro-input"
+                  aria-label="Valor em reais"
+                />
+                <button type="button" className="support-pill support-outro-btn" onClick={handleOutroValorSubmit}>
+                  Gerar Pix
+                </button>
+              </div>
+            )}
+            <p className="support-thanks">Obrigado por fazer parte dessa vibe.</p>
+            <p className="support-final">Cada apoio faz diferença.</p>
+            <p className="support-tip">Se aparecer &quot;indisponibilidade temporária&quot;, tente de novo em alguns minutos.</p>
+          </div>
+        </div>
+      )}
     </>
   );
 }
