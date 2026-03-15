@@ -35,14 +35,32 @@ try {
 
     $daily = [];
     try {
-        $stmtDaily = $pdo->query("SELECT date, total_count FROM clicks_daily ORDER BY date ASC");
+        $stmtDaily = $pdo->query("SELECT date, platform, source, total_count FROM clicks_daily ORDER BY date ASC, platform, source");
         $daily = $stmtDaily->fetchAll(PDO::FETCH_ASSOC);
         foreach ($daily as &$d) {
             $d['date'] = $d['date'] ?? null;
+            $d['platform'] = isset($d['platform']) ? (string) $d['platform'] : '';
+            $d['source'] = isset($d['source']) ? (string) $d['source'] : '';
             $d['total_count'] = (int) ($d['total_count'] ?? 0);
         }
     } catch (Throwable $e) {
-        // clicks_daily pode não existir em ambientes antigos
+        try {
+            $stmtDaily = $pdo->query("SELECT date, platform, total_count FROM clicks_daily ORDER BY date ASC, platform");
+            $rows = $stmtDaily->fetchAll(PDO::FETCH_ASSOC);
+            foreach ($rows as $r) {
+                $daily[] = ['date' => $r['date'] ?? null, 'platform' => (string) ($r['platform'] ?? ''), 'source' => '', 'total_count' => (int) ($r['total_count'] ?? 0)];
+            }
+        } catch (Throwable $e2) {
+            try {
+                $stmtDaily = $pdo->query("SELECT date, total_count FROM clicks_daily ORDER BY date ASC");
+                $rows = $stmtDaily->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($rows as $r) {
+                    $daily[] = ['date' => $r['date'] ?? null, 'platform' => '', 'source' => '', 'total_count' => (int) ($r['total_count'] ?? 0)];
+                }
+            } catch (Throwable $e3) {
+                // tabela não existe
+            }
+        }
     }
 
     echo json_encode(['rows' => $rows, 'daily' => $daily]);

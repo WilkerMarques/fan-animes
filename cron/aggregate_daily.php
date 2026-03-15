@@ -31,48 +31,68 @@ $yesterday = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))
 try {
     $pdo->beginTransaction();
 
-    // 1) Contar clicks do dia anterior
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) AS cnt
+    // 1) Contar clicks do dia anterior POR PLATAFORMA e SOURCE (spotify+facebook, youtube+tiktok, etc.)
+    $stmtClicks = $pdo->prepare("
+        SELECT platform, COALESCE(source, '') AS source, COUNT(*) AS cnt
         FROM clicks
         WHERE DATE(clicked_at) = :date
+        GROUP BY platform, source
     ");
-    $stmt->execute(['date' => $yesterday]);
-    $clicksCount = (int) $stmt->fetchColumn();
+    $stmtClicks->execute(['date' => $yesterday]);
+    $clicksByPlatformSource = $stmtClicks->fetchAll(PDO::FETCH_ASSOC);
+    $clicksCount = 0;
 
-    // 2) Somar ao clicks_daily (INSERT ou soma se já existir linha daquela data)
-    if ($clicksCount > 0) {
-        $pdo->prepare("
-            INSERT INTO clicks_daily (date, total_count)
-            VALUES (:date, :total)
-            ON DUPLICATE KEY UPDATE total_count = total_count + :total2
-        ")->execute([
-            'date'   => $yesterday,
-            'total'  => $clicksCount,
-            'total2' => $clicksCount,
-        ]);
+    // 2) Inserir/somar em clicks_daily uma linha por (date, platform, source)
+    $insertClick = $pdo->prepare("
+        INSERT INTO clicks_daily (date, platform, source, total_count)
+        VALUES (:date, :platform, :source, :total)
+        ON DUPLICATE KEY UPDATE total_count = total_count + :total2
+    ");
+    foreach ($clicksByPlatformSource as $row) {
+        $platform = $row['platform'] ?? '';
+        $source = $row['source'] ?? '';
+        $cnt = (int) ($row['cnt'] ?? 0);
+        if ($cnt > 0) {
+            $insertClick->execute([
+                'date'     => $yesterday,
+                'platform' => $platform,
+                'source'   => $source,
+                'total'    => $cnt,
+                'total2'   => $cnt,
+            ]);
+            $clicksCount += $cnt;
+        }
     }
 
-    // 3) Contar pageviews do dia anterior
-    $stmt = $pdo->prepare("
-        SELECT COUNT(*) AS cnt
+    // 3) Contar pageviews do dia anterior POR SOURCE (facebook, tiktok, etc.)
+    $stmtPv = $pdo->prepare("
+        SELECT COALESCE(source, '') AS source, COUNT(*) AS cnt
         FROM pageviews
         WHERE DATE(viewed_at) = :date
+        GROUP BY source
     ");
-    $stmt->execute(['date' => $yesterday]);
-    $pageviewsCount = (int) $stmt->fetchColumn();
+    $stmtPv->execute(['date' => $yesterday]);
+    $pageviewsBySource = $stmtPv->fetchAll(PDO::FETCH_ASSOC);
+    $pageviewsCount = 0;
 
-    // 4) Somar ao pageviews_daily
-    if ($pageviewsCount > 0) {
-        $pdo->prepare("
-            INSERT INTO pageviews_daily (date, total_count)
-            VALUES (:date, :total)
-            ON DUPLICATE KEY UPDATE total_count = total_count + :total2
-        ")->execute([
-            'date'   => $yesterday,
-            'total'  => $pageviewsCount,
-            'total2' => $pageviewsCount,
-        ]);
+    // 4) Inserir/somar em pageviews_daily uma linha por (date, source)
+    $insertPv = $pdo->prepare("
+        INSERT INTO pageviews_daily (date, source, total_count)
+        VALUES (:date, :source, :total)
+        ON DUPLICATE KEY UPDATE total_count = total_count + :total2
+    ");
+    foreach ($pageviewsBySource as $row) {
+        $source = $row['source'] ?? '';
+        $cnt = (int) ($row['cnt'] ?? 0);
+        if ($cnt > 0) {
+            $insertPv->execute([
+                'date'   => $yesterday,
+                'source' => $source,
+                'total'  => $cnt,
+                'total2' => $cnt,
+            ]);
+            $pageviewsCount += $cnt;
+        }
     }
 
     // 5) Deletar de clicks e pageviews todos os registros com data < hoje (mantém só hoje)
