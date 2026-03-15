@@ -116,11 +116,15 @@ try {
   }
   // .gitignore no deploy para git add -A não pegar node_modules/build/.deploy-staging nem "nul" (Windows)
   fs.writeFileSync(path.join(stagingDir, '.gitignore'), 'node_modules\nbuild\n.deploy-staging\nnul\n', 'utf8');
-  // .htaccess na raiz: bloquear .git + React/SPA routing (fallback para index.html)
+  // .htaccess na raiz: HTTPS, bloquear .git + React/SPA routing (fallback para index.html)
   const rootHtaccess = [
-    '# Bloquear acesso ao .git',
-    '',
     'RewriteEngine On',
+    '',
+    '# Redirecionar HTTP para HTTPS (fananimes.com.br -> https://fananimes.com.br/)',
+    'RewriteCond %{HTTPS} off',
+    'RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]',
+    '',
+    '# Bloquear acesso ao .git',
     'RewriteRule ^\\.git - [F]',
     '',
     '# React / SPA routing',
