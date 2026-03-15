@@ -233,6 +233,8 @@ function usePixels() {
         if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
         n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s);
       })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      // Desativa detecção automática (ex.: SubscribedButtonClick em botões Loja, Apoie, "Ver oferta", "Copiar", etc.)
+      window.fbq("set", "autoConfig", false, CONFIG.facebookPixelId);
       window.fbq("init", CONFIG.facebookPixelId);
       window.fbq("track", "PageView");
     }
