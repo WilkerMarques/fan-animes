@@ -1,6 +1,10 @@
-# Bloquear acesso ao .git
-
 RewriteEngine On
+
+# Redirecionar HTTP para HTTPS (fananimes.com.br -> https://fananimes.com.br/)
+RewriteCond %{HTTPS} off
+RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Bloquear acesso ao .git
 RewriteRule ^\.git - [F]
 
 # React / SPA routing
