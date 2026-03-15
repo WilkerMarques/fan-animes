@@ -32,7 +32,20 @@ try {
             $r['viewed_at'] = date('c', strtotime($r['viewed_at']));
         }
     }
-    echo json_encode($rows);
+
+    $daily = [];
+    try {
+        $stmtDaily = $pdo->query("SELECT date, total_count FROM pageviews_daily ORDER BY date ASC");
+        $daily = $stmtDaily->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($daily as &$d) {
+            $d['date'] = $d['date'] ?? null;
+            $d['total_count'] = (int) ($d['total_count'] ?? 0);
+        }
+    } catch (Throwable $e) {
+        // pageviews_daily pode não existir em ambientes antigos
+    }
+
+    echo json_encode(['rows' => $rows, 'daily' => $daily]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Erro ao consultar pageviews']);
