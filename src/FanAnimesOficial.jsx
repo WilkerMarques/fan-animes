@@ -971,7 +971,8 @@ function FanAnimesPage({ onFooterTap }) {
   const handleClick = (link) => {
     setClicked(link.id);
     const isFanAnimesRapSpotify = link.id === 4; // Fan Animes Rap Spotify não aciona pixel
-    if (!isYouTube(link.icon, link.url) && !isFanAnimesRapSpotify) {
+    const noPixel = ["instagram", "tiktok"].includes(link.icon); // TikTok e Instagram não acionam pixel (Loja e Apoie são botões que só abrem modal)
+    if (!isYouTube(link.icon, link.url) && !isFanAnimesRapSpotify && !noPixel) {
       fireClickButton(link.label, link.icon);
     }
     saveClick({ label: link.label, platform: link.icon });
