@@ -114,8 +114,8 @@ try {
     }
     rmDir(buildInStaging);
   }
-  // .gitignore no deploy para git add -A não pegar node_modules/build/.deploy-staging
-  fs.writeFileSync(path.join(stagingDir, '.gitignore'), 'node_modules\nbuild\n.deploy-staging\n', 'utf8');
+  // .gitignore no deploy para git add -A não pegar node_modules/build/.deploy-staging nem "nul" (Windows)
+  fs.writeFileSync(path.join(stagingDir, '.gitignore'), 'node_modules\nbuild\n.deploy-staging\nnul\n', 'utf8');
   // .htaccess na raiz: bloquear .git + React/SPA routing (fallback para index.html)
   const rootHtaccess = [
     '# Bloquear acesso ao .git',
@@ -165,6 +165,7 @@ try {
 
   const stagingEntries = fs.readdirSync(stagingDir);
   for (const name of stagingEntries) {
+    if (name === 'nul') continue; // Windows: evita arquivo especial
     const s = path.join(stagingDir, name);
     const d = path.join(root, name);
     if (fs.statSync(s).isDirectory()) {
