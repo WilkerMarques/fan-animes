@@ -64,6 +64,39 @@ try {
         }
     }
 
+    // 2b) Inserir/somar em clicks_daily_by_link (por label + platform) para "Cliques por link" em 7/14/28 dias
+    $stmtByLink = $pdo->prepare("
+        SELECT COALESCE(label, '') AS label, COALESCE(platform, '') AS platform, COUNT(*) AS cnt
+        FROM clicks
+        WHERE DATE(clicked_at) = :date
+        GROUP BY label, platform
+    ");
+    $stmtByLink->execute(['date' => $yesterday]);
+    $clicksByLink = $stmtByLink->fetchAll(PDO::FETCH_ASSOC);
+    try {
+        $insertByLink = $pdo->prepare("
+            INSERT INTO clicks_daily_by_link (date, label, platform, total_count)
+            VALUES (:date, :label, :platform, :total)
+            ON DUPLICATE KEY UPDATE total_count = total_count + :total2
+        ");
+        foreach ($clicksByLink as $row) {
+            $label = $row['label'] ?? '';
+            $platform = $row['platform'] ?? '';
+            $cnt = (int) ($row['cnt'] ?? 0);
+            if ($cnt > 0) {
+                $insertByLink->execute([
+                    'date'     => $yesterday,
+                    'label'    => $label,
+                    'platform' => $platform,
+                    'total'    => $cnt,
+                    'total2'   => $cnt,
+                ]);
+            }
+        }
+    } catch (Throwable $e) {
+        // tabela clicks_daily_by_link pode não existir ainda (rodar migrate-clicks-daily-by-link.sql)
+    }
+
     // 3) Contar pageviews do dia anterior POR SOURCE (facebook, tiktok, etc.)
     $stmtPv = $pdo->prepare("
         SELECT COALESCE(source, '') AS source, COUNT(*) AS cnt

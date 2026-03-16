@@ -127,13 +127,14 @@ async function fetchClicks() {
   return { unauthorized: false, data };
 }
 
-// Normaliza resposta da API: pode ser { rows, daily } ou array (legado)
+// Normaliza resposta da API: pode ser { rows, daily, dailyByLink } ou array (legado)
 function normalizeClicksData(data) {
-  if (!data) return { rows: [], daily: [] };
-  if (Array.isArray(data)) return { rows: data, daily: [] };
+  if (!data) return { rows: [], daily: [], dailyByLink: [] };
+  if (Array.isArray(data)) return { rows: data, daily: [], dailyByLink: [] };
   return {
     rows: Array.isArray(data.rows) ? data.rows : [],
     daily: Array.isArray(data.daily) ? data.daily : [],
+    dailyByLink: Array.isArray(data.dailyByLink) ? data.dailyByLink : [],
   };
 }
 
@@ -362,6 +363,7 @@ function Dashboard({ onExit }) {
 
   const clicksRows = clicks?.rows ?? (Array.isArray(clicks) ? clicks : []);
   const clicksDaily = clicks?.daily ?? [];
+  const clicksDailyByLink = clicks?.dailyByLink ?? [];
   const pageviewsRows = pageviews?.rows ?? (Array.isArray(pageviews) ? pageviews : []);
   const pageviewsDaily = pageviews?.daily ?? [];
 
@@ -493,11 +495,20 @@ function Dashboard({ onExit }) {
       ? dailyPageviewsInRange + rangePageviews.length
       : sumDailyBySourceInRange(pageviewsDaily, rangeDays, sourceFilter) + rangePageviews.length;
 
-  // Para "CLIQUES POR LINK": filtrar cliques E a lista de links pela plataforma (quando não for "Todos")
+  // Para "CLIQUES POR LINK": usar dailyByLink (somas guardadas ao fechar o dia) + registros de hoje (rows)
+  // assim 7/14/28 dias batem com os totais do banco; sem isso só apareciam os cliques de hoje.
+  const sumDailyByLinkInRange = (dailyByLinkList, rangeDaysVal, label, platform) => {
+    if (!dailyByLinkList.length) return 0;
+    if (rangeDaysVal === "today") return 0;
+    const inRange = isDailyDateInRange(rangeDaysVal);
+    return dailyByLinkList
+      .filter((d) => (d.label || "") === (label || "") && (d.platform || "") === (platform || "") && inRange(d))
+      .reduce((s, d) => s + (Number(d.total_count) || 0), 0);
+  };
   const clicksForLinksSection = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
   const linksForSection = filter === "all" ? CONFIG.links : CONFIG.links.filter((l) => l.icon === filter);
-  // Contar por label + plataforma para não contar o mesmo clique em várias linhas (ex.: "Todos")
   const totalsPerLinkForSection = linksForSection.map((l) =>
+    sumDailyByLinkInRange(clicksDailyByLink, rangeDays, l.label, l.icon) +
     clicksForLinksSection.filter((c) => c.label === l.label && c.platform === l.icon).length
   );
   const maxCountForLinksSection = Math.max(...totalsPerLinkForSection, 1);

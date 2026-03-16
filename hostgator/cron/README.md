@@ -2,9 +2,10 @@
 
 ## Script
 
-- **`aggregate_daily.php`** – Agrega clicks **por plataforma** (Spotify, YouTube, etc.) e pageviews **por source** (Facebook, TikTok, etc.) do dia anterior em `clicks_daily` e `pageviews_daily`, depois apaga os registros antigos. No dashboard, os totais por rede social e por origem do tráfego batem com o total (histórico + dia atual).
+- **`aggregate_daily.php`** – Agrega clicks **por plataforma** (Spotify, YouTube, etc.) e **por link** (label + platform) do dia anterior em `clicks_daily` e `clicks_daily_by_link`, e pageviews **por source** em `pageviews_daily`; depois apaga os registros antigos. No dashboard, os totais e **cliques por link** (7/14/28 dias) batem com o banco.
 
-**Se as tabelas foram criadas antes** (sem colunas `platform` / `page`), rode uma vez no banco: `api/migrate-clicks-daily-platform.sql`.
+**Se as tabelas foram criadas antes** (sem colunas `platform` / `page`), rode uma vez no banco: `api/migrate-clicks-daily-platform.sql`.  
+**Para "Cliques por link" em 7/14/28 dias**, crie a tabela com: `api/migrate-clicks-daily-by-link.sql`.
 
 ## Agendamento no cPanel
 

@@ -32,6 +32,16 @@ CREATE TABLE IF NOT EXISTS clicks_daily (
   UNIQUE KEY uk_date_platform_source (date, platform, source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Agregados diários por link (label + platform); cron preenche; usado em "Cliques por link" para 7/14/28 dias
+CREATE TABLE IF NOT EXISTS clicks_daily_by_link (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  date DATE NOT NULL,
+  label VARCHAR(255) NOT NULL DEFAULT '',
+  platform VARCHAR(20) NOT NULL DEFAULT '',
+  total_count INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_date_label_platform (date, label(100), platform)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Agregados diários por origem do tráfego (facebook, tiktok, etc.); cron preenche
 CREATE TABLE IF NOT EXISTS pageviews_daily (
   id INT AUTO_INCREMENT PRIMARY KEY,
