@@ -63,7 +63,21 @@ try {
         }
     }
 
-    echo json_encode(['rows' => $rows, 'daily' => $daily]);
+    $dailyByLink = [];
+    try {
+        $stmtByLink = $pdo->query("SELECT date, label, platform, total_count FROM clicks_daily_by_link ORDER BY date ASC, label, platform");
+        $dailyByLink = $stmtByLink->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($dailyByLink as &$d) {
+            $d['date'] = $d['date'] ?? null;
+            $d['label'] = isset($d['label']) ? (string) $d['label'] : '';
+            $d['platform'] = isset($d['platform']) ? (string) $d['platform'] : '';
+            $d['total_count'] = (int) ($d['total_count'] ?? 0);
+        }
+    } catch (Throwable $e) {
+        // tabela clicks_daily_by_link pode não existir (rodar migrate-clicks-daily-by-link.sql)
+    }
+
+    echo json_encode(['rows' => $rows, 'daily' => $daily, 'dailyByLink' => $dailyByLink]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Erro ao consultar cliques']);

@@ -6,6 +6,7 @@
 
 -- 1) Apagar tabelas (ordem: daily primeiro, depois as que recebem inserts)
 DROP TABLE IF EXISTS pageviews_daily;
+DROP TABLE IF EXISTS clicks_daily_by_link;
 DROP TABLE IF EXISTS clicks_daily;
 DROP TABLE IF EXISTS pageviews;
 DROP TABLE IF EXISTS clicks;
@@ -40,6 +41,15 @@ CREATE TABLE clicks_daily (
   source VARCHAR(255) NOT NULL DEFAULT '',
   total_count INT NOT NULL DEFAULT 0,
   UNIQUE KEY uk_date_platform_source (date, platform, source)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE clicks_daily_by_link (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  date DATE NOT NULL,
+  label VARCHAR(255) NOT NULL DEFAULT '',
+  platform VARCHAR(20) NOT NULL DEFAULT '',
+  total_count INT NOT NULL DEFAULT 0,
+  UNIQUE KEY uk_date_label_platform (date, label(100), platform)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE pageviews_daily (
