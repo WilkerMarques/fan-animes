@@ -25,13 +25,30 @@ if (!$pdo) {
 }
 
 try {
-    $stmt = $pdo->query("SELECT page, device, source, viewed_at FROM pageviews ORDER BY viewed_at DESC LIMIT 100000");
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as &$r) {
+    $today = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+
+    $stmtRecent = $pdo->prepare(
+        'SELECT page, device, source, viewed_at FROM pageviews WHERE DATE(viewed_at) = :today ORDER BY viewed_at DESC LIMIT 40'
+    );
+    $stmtRecent->execute(['today' => $today]);
+    $recent = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($recent as &$r) {
         if (isset($r['viewed_at'])) {
             $r['viewed_at'] = date('c', strtotime($r['viewed_at']));
         }
     }
+    unset($r);
+
+    $stmtTodayPv = $pdo->prepare(
+        'SELECT COALESCE(source, \'\') AS source, COUNT(*) AS cnt FROM pageviews WHERE DATE(viewed_at) = :today GROUP BY source'
+    );
+    $stmtTodayPv->execute(['today' => $today]);
+    $today_breakdown = $stmtTodayPv->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($today_breakdown as &$b) {
+        $b['cnt'] = (int) ($b['cnt'] ?? 0);
+        $b['source'] = isset($b['source']) ? (string) $b['source'] : '';
+    }
+    unset($b);
 
     $daily = [];
     try {
@@ -54,7 +71,12 @@ try {
         }
     }
 
-    echo json_encode(['rows' => $rows, 'daily' => $daily]);
+    echo json_encode([
+        'rows' => [],
+        'recent' => $recent,
+        'today_breakdown' => $today_breakdown,
+        'daily' => $daily,
+    ]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Erro ao consultar pageviews']);
