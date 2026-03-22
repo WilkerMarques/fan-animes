@@ -2,6 +2,9 @@
  * Deploy para HostGator via branch "deploy".
  * Gera build, junta api/cron do hostgator e faz push na branch deploy.
  * No cPanel (Git), clone/pull da branch "deploy" na public_html.
+ *
+ * Segurança: api/config.local.php NUNCA é copiado para o staging nem commitado.
+ * No servidor, crie/mantenha config.local.php manualmente (fora do Git).
  */
 const { execSync } = require('child_process');
 const fs = require('fs');
@@ -26,10 +29,13 @@ function rmDir(dir) {
   }
 }
 
+const NEVER_DEPLOY_NAMES = new Set(['config.local.php', 'schema-local.sql']);
+
 function copyDir(src, dest) {
   if (!fs.existsSync(src)) return;
   fs.mkdirSync(dest, { recursive: true });
   for (const name of fs.readdirSync(src)) {
+    if (NEVER_DEPLOY_NAMES.has(name)) continue;
     const s = path.join(src, name);
     const d = path.join(dest, name);
     if (fs.statSync(s).isDirectory()) {
@@ -83,7 +89,7 @@ try {
   if (fs.existsSync(apiSrc)) {
     fs.mkdirSync(apiDest, { recursive: true });
     for (const name of fs.readdirSync(apiSrc)) {
-      if (name === 'config.local.php' || name === 'schema-local.sql') continue;
+      if (NEVER_DEPLOY_NAMES.has(name)) continue;
       const s = path.join(apiSrc, name);
       const d = path.join(apiDest, name);
       if (fs.statSync(s).isDirectory()) {
@@ -115,7 +121,17 @@ try {
     rmDir(buildInStaging);
   }
   // .gitignore no deploy para git add -A não pegar node_modules/build/.deploy-staging nem "nul" (Windows)
-  fs.writeFileSync(path.join(stagingDir, '.gitignore'), 'node_modules\nbuild\n.deploy-staging\nnul\n', 'utf8');
+  const deployGitignore = [
+    'node_modules',
+    'build',
+    '.deploy-staging',
+    'nul',
+    '',
+    '# Credenciais e SQL local — nunca no repositório deploy',
+    'api/config.local.php',
+    'hostgator/api/config.local.php',
+  ].join('\n');
+  fs.writeFileSync(path.join(stagingDir, '.gitignore'), deployGitignore, 'utf8');
   // .htaccess na raiz: HTTPS, bloquear .git + React/SPA routing (fallback para index.html)
   const rootHtaccess = [
     'RewriteEngine On',
@@ -178,6 +194,17 @@ try {
       fs.copyFileSync(s, d);
     }
   }
+
+  // Credenciais não devem existir aqui; remove se algo as copiou por engano
+  const stripSecretIfPresent = (rel) => {
+    const p = path.join(root, ...rel.split('/'));
+    if (fs.existsSync(p)) {
+      fs.unlinkSync(p);
+      console.log('Removido do deploy (não commitar):', rel);
+    }
+  };
+  stripSecretIfPresent('api/config.local.php');
+  stripSecretIfPresent('hostgator/api/config.local.php');
 
   // No deploy, .gitignore ignora node_modules/build/.deploy-staging; add -A adiciona o resto
   run('git add -A');

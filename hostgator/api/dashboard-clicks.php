@@ -25,12 +25,50 @@ if (!$pdo) {
 }
 
 try {
-    $stmt = $pdo->query("SELECT label, platform, device, source, clicked_at FROM clicks ORDER BY clicked_at DESC LIMIT 100000");
-    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($rows as &$r) {
+    // Só precisamos de agregados do dia atual + amostra para a lista (cron mantém clicks só com data de hoje).
+    $today = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+
+    $stmtRecent = $pdo->prepare(
+        'SELECT label, platform, device, source, clicked_at FROM clicks WHERE DATE(clicked_at) = :today ORDER BY clicked_at DESC LIMIT 40'
+    );
+    $stmtRecent->execute(['today' => $today]);
+    $recent = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($recent as &$r) {
         if (isset($r['clicked_at'])) {
             $r['clicked_at'] = date('c', strtotime($r['clicked_at']));
         }
+    }
+    unset($r);
+
+    $stmtTodayBreakdown = $pdo->prepare(
+        'SELECT platform, COALESCE(source, \'\') AS source, COUNT(*) AS cnt FROM clicks WHERE DATE(clicked_at) = :today GROUP BY platform, source'
+    );
+    $stmtTodayBreakdown->execute(['today' => $today]);
+    $today_breakdown = $stmtTodayBreakdown->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($today_breakdown as &$b) {
+        $b['cnt'] = (int) ($b['cnt'] ?? 0);
+        $b['platform'] = isset($b['platform']) ? (string) $b['platform'] : '';
+        $b['source'] = isset($b['source']) ? (string) $b['source'] : '';
+    }
+    unset($b);
+
+    $today_by_link = [];
+    try {
+        $stmtByLinkToday = $pdo->prepare(
+            'SELECT COALESCE(label, \'\') AS label, COALESCE(platform, \'\') AS platform, COALESCE(source, \'\') AS source, COUNT(*) AS cnt
+             FROM clicks WHERE DATE(clicked_at) = :today GROUP BY label, platform, source'
+        );
+        $stmtByLinkToday->execute(['today' => $today]);
+        $today_by_link = $stmtByLinkToday->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($today_by_link as &$t) {
+            $t['cnt'] = (int) ($t['cnt'] ?? 0);
+            $t['label'] = isset($t['label']) ? (string) $t['label'] : '';
+            $t['platform'] = isset($t['platform']) ? (string) $t['platform'] : '';
+            $t['source'] = isset($t['source']) ? (string) $t['source'] : '';
+        }
+        unset($t);
+    } catch (Throwable $e) {
+        $today_by_link = [];
     }
 
     $daily = [];
@@ -77,7 +115,14 @@ try {
         // tabela clicks_daily_by_link pode não existir (rodar migrate-clicks-daily-by-link.sql)
     }
 
-    echo json_encode(['rows' => $rows, 'daily' => $daily, 'dailyByLink' => $dailyByLink]);
+    echo json_encode([
+        'rows' => [],
+        'recent' => $recent,
+        'today_breakdown' => $today_breakdown,
+        'today_by_link' => $today_by_link,
+        'daily' => $daily,
+        'dailyByLink' => $dailyByLink,
+    ]);
 } catch (Throwable $e) {
     http_response_code(500);
     echo json_encode(['error' => 'Erro ao consultar cliques']);

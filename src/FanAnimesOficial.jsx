@@ -34,6 +34,12 @@ const CONFIG = {
     { label: "R$ 20", url: "" },
     { label: "Outro valor", url: "" },
   ],
+  // Coleção Shopee (Collshp): vitrine com vários itens em um único link
+  lojaShopeeCollection: {
+    title: "Coleção Fan Animes",
+    description: "Abra a loja completa na Shopee",
+    url: "https://collshp.com/fananimes?share_channel_code=1&view=storefront",
+  },
   // Imagens em public/loja/ (camiseta.png, moleton.png, funkopop.png, quadro.png)
   lojaProducts: [
     { title: "Moletom", url: "https://meli.la/31guCbw", image: `${process.env.PUBLIC_URL || ""}/loja/moleton.png` },
@@ -127,24 +133,93 @@ async function fetchClicks() {
   return { unauthorized: false, data };
 }
 
-// Normaliza resposta da API: pode ser { rows, daily, dailyByLink } ou array (legado)
+// Normaliza resposta da API: agregados diários + amostra recente + totais de hoje (sem lista gigante)
 function normalizeClicksData(data) {
-  if (!data) return { rows: [], daily: [], dailyByLink: [] };
-  if (Array.isArray(data)) return { rows: data, daily: [], dailyByLink: [] };
+  if (!data) return { rows: [], recent: [], today_breakdown: [], today_by_link: [], daily: [], dailyByLink: [] };
+  if (Array.isArray(data)) {
+    return { rows: data, recent: [], today_breakdown: [], today_by_link: [], daily: [], dailyByLink: [] };
+  }
   return {
     rows: Array.isArray(data.rows) ? data.rows : [],
+    recent: Array.isArray(data.recent) ? data.recent : [],
+    today_breakdown: Array.isArray(data.today_breakdown) ? data.today_breakdown : [],
+    today_by_link: Array.isArray(data.today_by_link) ? data.today_by_link : [],
     daily: Array.isArray(data.daily) ? data.daily : [],
     dailyByLink: Array.isArray(data.dailyByLink) ? data.dailyByLink : [],
   };
 }
 
 function normalizePageviewsData(data) {
-  if (!data) return { rows: [], daily: [] };
-  if (Array.isArray(data)) return { rows: data, daily: [] };
+  if (!data) return { rows: [], recent: [], today_breakdown: [], daily: [] };
+  if (Array.isArray(data)) return { rows: data, recent: [], today_breakdown: [], daily: [] };
   return {
     rows: Array.isArray(data.rows) ? data.rows : [],
+    recent: Array.isArray(data.recent) ? data.recent : [],
+    today_breakdown: Array.isArray(data.today_breakdown) ? data.today_breakdown : [],
     daily: Array.isArray(data.daily) ? data.daily : [],
   };
+}
+
+function sourceMatchesFilter(sourceVal, sourceFilter) {
+  if (!sourceFilter || sourceFilter === "all") return true;
+  return (sourceVal || "").toLowerCase() === String(sourceFilter).toLowerCase();
+}
+
+/** Agrega linhas legadas em breakdown por platform+source (fallback). */
+function buildClickBreakdownFromRows(rows) {
+  const acc = new Map();
+  for (const r of rows || []) {
+    const k = `${r.platform || ""}\0${r.source || ""}`;
+    acc.set(k, (acc.get(k) || 0) + 1);
+  }
+  return [...acc.entries()].map(([k, cnt]) => {
+    const [platform, source] = k.split("\0");
+    return { platform, source, cnt };
+  });
+}
+
+function buildTodayByLinkFromRows(rows) {
+  const acc = new Map();
+  for (const r of rows || []) {
+    const k = `${r.label || ""}\0${r.platform || ""}\0${r.source || ""}`;
+    acc.set(k, (acc.get(k) || 0) + 1);
+  }
+  return [...acc.entries()].map(([k, cnt]) => {
+    const [label, platform, source] = k.split("\0");
+    return { label, platform, source, cnt };
+  });
+}
+
+function sumClickTodayBreakdown(breakdown, sourceFilter, platformFilter = null) {
+  return (breakdown || []).reduce((s, row) => {
+    if (!sourceMatchesFilter(row.source, sourceFilter)) return s;
+    if (platformFilter != null && row.platform !== platformFilter) return s;
+    return s + (Number(row.cnt) || 0);
+  }, 0);
+}
+
+function sumPageviewTodayBreakdown(breakdown, sourceFilter) {
+  return (breakdown || []).reduce((s, row) => {
+    if (!sourceMatchesFilter(row.source, sourceFilter)) return s;
+    return s + (Number(row.cnt) || 0);
+  }, 0);
+}
+
+function todayCountForLinkFromBreakdown(breakdown, label, platform, sourceFilter) {
+  return (breakdown || []).reduce((s, row) => {
+    if (row.label !== label || row.platform !== platform) return s;
+    if (!sourceMatchesFilter(row.source, sourceFilter)) return s;
+    return s + (Number(row.cnt) || 0);
+  }, 0);
+}
+
+function buildPageviewBreakdownFromRows(rows) {
+  const acc = new Map();
+  for (const r of rows || []) {
+    const s = r.source || "";
+    acc.set(s, (acc.get(s) || 0) + 1);
+  }
+  return [...acc.entries()].map(([source, cnt]) => ({ source, cnt }));
 }
 
 async function savePageview({ page }) {
@@ -295,15 +370,15 @@ function Particle({ style }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-const DASHBOARD_POLL_INTERVAL_MS = 30 * 1000; // 30 segundos
+const DASHBOARD_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
 
 function Dashboard({ onExit }) {
-  const [clicks, setClicks] = useState([]);
-  const [pageviews, setPageviews] = useState([]);
+  const [clicks, setClicks] = useState(() => normalizeClicksData(null));
+  const [pageviews, setPageviews] = useState(() => normalizePageviewsData(null));
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [filter, setFilter] = useState("all");
-  const [rangeDays, setRangeDays] = useState(7);
+  const [rangeDays, setRangeDays] = useState("today");
   const [sourceFilter, setSourceFilter] = useState("all"); // all | facebook | tiktok (origem do pixel)
 
   const loadDashboardData = useCallback(async (showRefreshing = false) => {
@@ -339,7 +414,7 @@ function Dashboard({ onExit }) {
     };
   }, [loadDashboardData]);
 
-  // Atualização automática a cada 30 segundos
+  // Atualização automática a cada 5 minutos
   useEffect(() => {
     if (loading) return;
     const interval = setInterval(() => {
@@ -352,58 +427,35 @@ function Dashboard({ onExit }) {
     loadDashboardData(true);
   }, [loadDashboardData]);
 
-  const todayStartMs = (() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  })();
-
   const toDateStr = (date) => date.toISOString().slice(0, 10);
   const todayStr = toDateStr(new Date());
 
-  const clicksRows = clicks?.rows ?? (Array.isArray(clicks) ? clicks : []);
-  const clicksDaily = clicks?.daily ?? [];
-  const clicksDailyByLink = clicks?.dailyByLink ?? [];
-  const pageviewsRows = pageviews?.rows ?? (Array.isArray(pageviews) ? pageviews : []);
-  const pageviewsDaily = pageviews?.daily ?? [];
+  const clicksRows = Array.isArray(clicks) ? clicks : (clicks?.rows ?? []);
+  const clicksRecent = Array.isArray(clicks) ? [] : (Array.isArray(clicks?.recent) ? clicks.recent : []);
+  const clicksDaily = Array.isArray(clicks) ? [] : (clicks?.daily ?? []);
+  const clicksDailyByLink = Array.isArray(clicks) ? [] : (clicks?.dailyByLink ?? []);
+  const pageviewsRows = Array.isArray(pageviews) ? pageviews : (pageviews?.rows ?? []);
+  const pageviewsRecent = Array.isArray(pageviews) ? [] : (Array.isArray(pageviews?.recent) ? pageviews.recent : []);
+  const pageviewsDaily = Array.isArray(pageviews) ? [] : (pageviews?.daily ?? []);
 
-  const bySource = (list, sourceKey) =>
-    sourceFilter === "all" ? list : list.filter((x) => (x[sourceKey] || "").toLowerCase() === sourceFilter);
+  // Totais de hoje vêm de agregados SQL; fallback = amostra/restante de rows (API antiga)
+  const effectiveClickBreakdown =
+    !Array.isArray(clicks) && clicks?.today_breakdown && clicks.today_breakdown.length > 0
+      ? clicks.today_breakdown
+      : buildClickBreakdownFromRows([...clicksRecent, ...clicksRows]);
+  const effectiveTodayByLink =
+    !Array.isArray(clicks) && clicks?.today_by_link && clicks.today_by_link.length > 0
+      ? clicks.today_by_link
+      : buildTodayByLinkFromRows([...clicksRecent, ...clicksRows]);
+  const effectivePageviewBreakdown =
+    !Array.isArray(pageviews) && pageviews?.today_breakdown && pageviews.today_breakdown.length > 0
+      ? pageviews.today_breakdown
+      : buildPageviewBreakdownFromRows([...pageviewsRecent, ...pageviewsRows]);
 
-  const clicksBySource = bySource(clicksRows, "source");
-  const pageviewsBySource = bySource(pageviewsRows, "source");
+  const todayClicksInRange = sumClickTodayBreakdown(effectiveClickBreakdown, sourceFilter);
+  const todayPageviewsInRange = sumPageviewTodayBreakdown(effectivePageviewBreakdown, sourceFilter);
 
-  const rangeClicks =
-    rangeDays === "all"
-      ? clicksBySource
-      : rangeDays === "today"
-        ? clicksBySource.filter((c) => {
-            const t = new Date(c.clicked_at).getTime();
-            return Number.isFinite(t) && t >= todayStartMs;
-          })
-        : clicksBySource.filter((c) => {
-            const t = new Date(c.clicked_at).getTime();
-            if (!Number.isFinite(t)) return false;
-            return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
-          });
-
-  const filtered = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
-
-  const rangePageviews =
-    rangeDays === "all"
-      ? pageviewsBySource
-      : rangeDays === "today"
-        ? pageviewsBySource.filter((p) => {
-            const t = new Date(p.viewed_at).getTime();
-            return Number.isFinite(t) && t >= todayStartMs;
-          })
-        : pageviewsBySource.filter((p) => {
-            const t = new Date(p.viewed_at).getTime();
-            if (!Number.isFinite(t)) return false;
-            return Date.now() - t <= rangeDays * 24 * 60 * 60 * 1000;
-          });
-
-  // Soma dos totais das tabelas daily no período (só dias passados; hoje está em rows)
+  // Soma dos totais das tabelas daily no período (só dias passados; hoje vem de today_breakdown)
   const sumDailyInRange = (dailyList, rangeDaysVal) => {
     if (!dailyList.length) return 0;
     if (rangeDaysVal === "today") return 0;
@@ -482,21 +534,22 @@ function Dashboard({ onExit }) {
 
   const byPlatform = ["spotify", "youtube", "instagram", "tiktok"].map((p) => ({
     name: p,
-    count: sumDailyByPlatformInRange(clicksDaily, rangeDays, p, sourceFilter) + rangeClicks.filter((c) => c.platform === p).length,
+    count:
+      sumDailyByPlatformInRange(clicksDaily, rangeDays, p, sourceFilter) +
+      sumClickTodayBreakdown(effectiveClickBreakdown, sourceFilter, p),
   }));
 
   const totalCliques =
     sourceFilter === "all"
-      ? dailyClicksInRange + rangeClicks.length
-      : sumDailyClicksBySourceInRange(clicksDaily, rangeDays, sourceFilter) + rangeClicks.length;
-  // Pageviews: quando filtro Facebook/TikTok, somar só daily dessa origem + registros recentes já filtrados
+      ? dailyClicksInRange + todayClicksInRange
+      : sumDailyClicksBySourceInRange(clicksDaily, rangeDays, sourceFilter) + todayClicksInRange;
+
   const totalPageviews =
     sourceFilter === "all"
-      ? dailyPageviewsInRange + rangePageviews.length
-      : sumDailyBySourceInRange(pageviewsDaily, rangeDays, sourceFilter) + rangePageviews.length;
+      ? dailyPageviewsInRange + todayPageviewsInRange
+      : sumDailyBySourceInRange(pageviewsDaily, rangeDays, sourceFilter) + todayPageviewsInRange;
 
-  // Para "CLIQUES POR LINK": usar dailyByLink (somas guardadas ao fechar o dia) + registros de hoje (rows)
-  // assim 7/14/28 dias batem com os totais do banco; sem isso só apareciam os cliques de hoje.
+  // Para "CLIQUES POR LINK": dailyByLink (dias fechados) + agregado de hoje por link (SQL)
   const sumDailyByLinkInRange = (dailyByLinkList, rangeDaysVal, label, platform) => {
     if (!dailyByLinkList.length) return 0;
     if (rangeDaysVal === "today") return 0;
@@ -505,13 +558,17 @@ function Dashboard({ onExit }) {
       .filter((d) => (d.label || "") === (label || "") && (d.platform || "") === (platform || "") && inRange(d))
       .reduce((s, d) => s + (Number(d.total_count) || 0), 0);
   };
-  const clicksForLinksSection = filter === "all" ? rangeClicks : rangeClicks.filter((c) => c.platform === filter);
   const linksForSection = filter === "all" ? CONFIG.links : CONFIG.links.filter((l) => l.icon === filter);
   const totalsPerLinkForSection = linksForSection.map((l) =>
     sumDailyByLinkInRange(clicksDailyByLink, rangeDays, l.label, l.icon) +
-    clicksForLinksSection.filter((c) => c.label === l.label && c.platform === l.icon).length
+    todayCountForLinkFromBreakdown(effectiveTodayByLink, l.label, l.icon, sourceFilter)
   );
   const maxCountForLinksSection = Math.max(...totalsPerLinkForSection, 1);
+
+  const recentClicksFiltered = clicksRecent
+    .filter((c) => (filter === "all" ? true : c.platform === filter))
+    .filter((c) => sourceMatchesFilter(c.source, sourceFilter))
+    .slice(0, 10);
 
   const handleLogout = async () => {
     await logoutDashboard();
@@ -573,11 +630,11 @@ function Dashboard({ onExit }) {
           <>
             <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
               {[
-                { id: "all", label: "Total" },
                 { id: "today", label: "Hoje" },
                 { id: 7, label: "7 dias" },
                 { id: 14, label: "14 dias" },
                 { id: 28, label: "28 dias" },
+                { id: "all", label: "Total" },
               ].map((r) => (
                 <button
                   key={r.id}
@@ -688,8 +745,8 @@ function Dashboard({ onExit }) {
                 CLIQUES POR LINK
               </div>
 
-              {linksForSection.map((l) => {
-                const count = clicksForLinksSection.filter((c) => c.label === l.label && c.platform === l.icon).length;
+              {linksForSection.map((l, idx) => {
+                const count = totalsPerLinkForSection[idx] ?? 0;
                 const pct = maxCountForLinksSection > 0 ? (count / maxCountForLinksSection) * 100 : 0;
                 const col = l.icon === "spotify" ? "#1DB954" : l.icon === "youtube" ? "#FF0000" : l.icon === "instagram" ? "#E1306C" : "#00F2EA";
 
@@ -716,11 +773,15 @@ function Dashboard({ onExit }) {
             </div>
 
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)", borderRadius: 14, padding: "20px 16px" }}>
-              <div style={{ fontSize: "0.75rem", color: "#4a6a7a", marginBottom: 16, letterSpacing: "0.05em" }}>
+              <div style={{ fontSize: "0.75rem", color: "#4a6a7a", marginBottom: 8, letterSpacing: "0.05em" }}>
                 CLIQUES RECENTES
               </div>
+              <div style={{ fontSize: "0.65rem", color: "#3a5a6a", marginBottom: 14, lineHeight: 1.4 }}>
+                Até 10 registros de uma amostra do dia (a API não envia mais a lista completa).
+                {rangeDays !== "today" ? " Os totais acima já refletem o período selecionado." : ""}
+              </div>
 
-              {filtered.slice(0, 10).map((c, i) => (
+              {recentClicksFiltered.map((c, i) => (
                 <div
                   key={`${c.clicked_at}-${i}`}
                   style={{
@@ -748,7 +809,7 @@ function Dashboard({ onExit }) {
                 </div>
               ))}
 
-              {filtered.length === 0 && (
+              {recentClicksFiltered.length === 0 && (
                 <div style={{ color: "#4a6a7a", fontSize: "0.8rem", textAlign: "center", padding: 20 }}>
                   Nenhum clique ainda
                 </div>
@@ -1177,6 +1238,14 @@ function FanAnimesPage({ onFooterTap }) {
         .loja-product-desc{font-size:0.78rem;color:#7a9bbf}
         .loja-product-btn{flex-shrink:0;padding:8px 16px;background:#ff6b35;border:none;border-radius:999px;color:#fff;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s;text-decoration:none;display:inline-block}
         .loja-product-btn:hover{background:#ff8555;transform:translateY(-1px)}
+        .loja-section-label{font-size:0.68rem;color:#5a7a8a;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 10px;font-weight:600}
+        .loja-section-label.ml{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08)}
+        .loja-shopee-card{display:flex;flex-direction:column;gap:8px;background:linear-gradient(145deg,rgba(238,77,45,0.14) 0%,rgba(22,20,38,0.98) 55%);border:1px solid rgba(238,77,45,0.42);border-radius:14px;padding:14px 14px 16px;text-align:left;margin-bottom:4px}
+        .loja-shopee-badge{font-size:0.65rem;font-weight:800;color:#ee4d2d;letter-spacing:0.14em}
+        .loja-shopee-title{font-size:0.95rem;font-weight:700;color:#fff;line-height:1.25}
+        .loja-shopee-desc{font-size:0.74rem;color:#8b9aaf;line-height:1.45}
+        .loja-shopee-btn{display:block;width:100%;text-align:center;padding:11px 14px;background:#ee4d2d;border:none;border-radius:10px;color:#fff;font-size:0.86rem;font-weight:700;cursor:pointer;text-decoration:none;font-family:inherit;transition:transform 0.2s,box-shadow 0.2s,background 0.2s;margin-top:4px}
+        .loja-shopee-btn:hover{background:#ff5c3d;transform:translateY(-1px);box-shadow:0 6px 18px rgba(238,77,45,0.32)}
       `}</style>
 
       <div className="bg-wrap">
@@ -1277,7 +1346,28 @@ function FanAnimesPage({ onFooterTap }) {
           <div className="loja-card" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="loja-close" onClick={() => setShowLoja(false)} aria-label="Fechar">×</button>
             <h2 className="loja-title">Loja Fan Animes</h2>
-            <p className="loja-subtitle">Mercado Livre</p>
+            <p className="loja-subtitle">Shopee e Mercado Livre</p>
+
+            {CONFIG.lojaShopeeCollection?.url && (
+              <>
+                <div className="loja-section-label">Shopee · coleção</div>
+                <div className="loja-shopee-card">
+                  <span className="loja-shopee-badge">SHOPEE</span>
+                  <div className="loja-shopee-title">{CONFIG.lojaShopeeCollection.title}</div>
+                  <p className="loja-shopee-desc">{CONFIG.lojaShopeeCollection.description}</p>
+                  <a
+                    href={CONFIG.lojaShopeeCollection.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="loja-shopee-btn"
+                  >
+                    Abrir
+                  </a>
+                </div>
+              </>
+            )}
+
+            <div className="loja-section-label ml">Mercado Livre · itens separados</div>
             <div className="loja-list">
               {CONFIG.lojaProducts.map((product, i) => (
                 <div key={i} className="loja-product">
