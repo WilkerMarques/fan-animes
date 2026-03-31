@@ -94,11 +94,26 @@ if (typeof window !== "undefined" && !API_BASE && window.location.port) {
   console.warn("[FanAnimes] REACT_APP_API_URL não definido. Requisições vão para o mesmo host. Para dev local, crie .env.local na raiz com: REACT_APP_API_URL=https://sua-url-hostgator");
 }
 
+function createAbortableFetch(timeoutMs = 10000) {
+  return async (url, options = {}) => {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      return response;
+    } finally {
+      clearTimeout(id);
+    }
+  };
+}
+
+const apiFetch = typeof window !== "undefined" ? createAbortableFetch() : fetch;
+
 async function saveClick({ label, platform }) {
   const trimmedLabel = (label == null ? "" : String(label)).trim();
   if (!trimmedLabel) return;
   try {
-    await fetch(`${API_BASE}/api/save-click`, {
+    const res = await apiFetch(`${API_BASE}/api/save-click`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -110,16 +125,24 @@ async function saveClick({ label, platform }) {
         source: getTrafficSource(),
       }),
     });
+    if (res.status === 429) {
+      console.warn("API save-click: limite de requisições atingido (429).");
+    }
   } catch (e) {
     console.error("API save-click:", e);
   }
 }
 
 async function fetchClicks() {
-  const res = await fetch(`${API_BASE}/api/dashboard-clicks`, {
+  const res = await apiFetch(`${API_BASE}/api/dashboard-clicks`, {
     method: "GET",
     credentials: "include",
   });
+
+  if (res.status === 429) {
+    console.warn("API dashboard-clicks: limite de requisições atingido (429).");
+    return { unauthorized: false, data: [] };
+  }
 
   if (res.status === 401) {
     return { unauthorized: true, data: [] };
@@ -224,7 +247,7 @@ function buildPageviewBreakdownFromRows(rows) {
 
 async function savePageview({ page }) {
   try {
-    await fetch(`${API_BASE}/api/save-pageview`, {
+    const res = await apiFetch(`${API_BASE}/api/save-pageview`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -235,16 +258,24 @@ async function savePageview({ page }) {
         source: getTrafficSource(),
       }),
     });
+    if (res.status === 429) {
+      console.warn("API save-pageview: limite de requisições atingido (429).");
+    }
   } catch (e) {
     console.error("API save-pageview:", e);
   }
 }
 
 async function fetchPageviews() {
-  const res = await fetch(`${API_BASE}/api/dashboard-pageviews`, {
+  const res = await apiFetch(`${API_BASE}/api/dashboard-pageviews`, {
     method: "GET",
     credentials: "include",
   });
+
+  if (res.status === 429) {
+    console.warn("API dashboard-pageviews: limite de requisições atingido (429).");
+    return { unauthorized: false, data: [] };
+  }
 
   if (res.status === 401) {
     return { unauthorized: true, data: [] };
@@ -259,7 +290,7 @@ async function fetchPageviews() {
 }
 
 async function loginDashboard(password) {
-  const res = await fetch(`${API_BASE}/api/login`, {
+  const res = await apiFetch(`${API_BASE}/api/login`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -279,7 +310,7 @@ async function loginDashboard(password) {
 
 async function logoutDashboard() {
   try {
-    await fetch(`${API_BASE}/api/logout`, {
+    await apiFetch(`${API_BASE}/api/logout`, {
       method: "POST",
       credentials: "include",
     });
@@ -370,8 +401,6 @@ function Particle({ style }) {
 // ============================================================
 // DASHBOARD
 // ============================================================
-const DASHBOARD_POLL_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
-
 function Dashboard({ onExit }) {
   const [clicks, setClicks] = useState(() => normalizeClicksData(null));
   const [pageviews, setPageviews] = useState(() => normalizePageviewsData(null));
@@ -413,15 +442,6 @@ function Dashboard({ onExit }) {
       mounted = false;
     };
   }, [loadDashboardData]);
-
-  // Atualização automática a cada 5 minutos
-  useEffect(() => {
-    if (loading) return;
-    const interval = setInterval(() => {
-      loadDashboardData(false);
-    }, DASHBOARD_POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
-  }, [loading, loadDashboardData]);
 
   const handleRefresh = useCallback(() => {
     loadDashboardData(true);
@@ -1070,7 +1090,11 @@ function FanAnimesPage({ onFooterTap }) {
     setSupportLoading(true);
     setSupportError("");
     try {
-      const res = await fetch(`${API_BASE}/api/pix-copia-cola?valor=${encodeURIComponent(v)}`);
+      const res = await apiFetch(`${API_BASE}/api/pix-copia-cola?valor=${encodeURIComponent(v)}`);
+      if (res.status === 429) {
+        setSupportError("Muitas requisições em pouco tempo. Tente novamente em alguns instantes.");
+        return;
+      }
       const data = await res.json().catch(() => ({}));
       if (supportRequestValorRef.current !== v) return;
       if (!res.ok || data.error) {
