@@ -2,3 +2,7 @@ node_modules
 build
 .deploy-staging
 nul
+
+# Credenciais e SQL local — nunca no repositório deploy
+api/config.local.php
+hostgator/api/config.local.php
