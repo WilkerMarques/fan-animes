@@ -4,6 +4,8 @@ import QRCode from "qrcode";
 // ============================================================
 // 🔧 CONFIGURAÇÃO
 // ============================================================
+const LOJA_MELI_URL = "https://meli.la/1ymUDop";
+const LOJA_MELI_QUADRO_URL = "https://meli.la/2TF6m93";
 const CONFIG = {
   facebookPixelId: "1582364783017079",
   tiktokPixelId: "D6SE1DBC77U4MV0OC1FG",
@@ -36,10 +38,10 @@ const CONFIG = {
   ],
   // Imagens em public/loja/ (camiseta.png, moleton.png, funkopop.png, quadro.png)
   lojaProducts: [
-    { title: "Moletom", url: "https://meli.la/31guCbw", image: `${process.env.PUBLIC_URL || ""}/loja/moleton.png` },
-    { title: "Camiseta", url: "https://meli.la/13eaovN", image: `${process.env.PUBLIC_URL || ""}/loja/camiseta.png` },
-    { title: "Funko Pop", url: "https://meli.la/1ymUDop", image: `${process.env.PUBLIC_URL || ""}/loja/funkopop.png` },
-    { title: "Quadro", url: "https://meli.la/2TF6m93", image: `${process.env.PUBLIC_URL || ""}/loja/quadro.png` },
+    { title: "Moletom", url: LOJA_MELI_URL, image: `${process.env.PUBLIC_URL || ""}/loja/moleton.png` },
+    { title: "Camiseta", url: LOJA_MELI_URL, image: `${process.env.PUBLIC_URL || ""}/loja/camiseta.png` },
+    { title: "Funko Pop", url: LOJA_MELI_URL, image: `${process.env.PUBLIC_URL || ""}/loja/funkopop.png` },
+    { title: "Quadro", url: LOJA_MELI_QUADRO_URL, image: `${process.env.PUBLIC_URL || ""}/loja/quadro.png` },
   ],
 };
 
