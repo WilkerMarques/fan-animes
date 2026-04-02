@@ -34,12 +34,6 @@ const CONFIG = {
     { label: "R$ 20", url: "" },
     { label: "Outro valor", url: "" },
   ],
-  // Coleção Shopee (Collshp): vitrine com vários itens em um único link
-  lojaShopeeCollection: {
-    title: "Coleção Fan Animes",
-    description: "Abra a loja completa na Shopee",
-    url: "https://collshp.com/fananimes?share_channel_code=1&view=storefront",
-  },
   // Imagens em public/loja/ (camiseta.png, moleton.png, funkopop.png, quadro.png)
   lojaProducts: [
     { title: "Moletom", url: "https://meli.la/31guCbw", image: `${process.env.PUBLIC_URL || ""}/loja/moleton.png` },
@@ -1262,14 +1256,6 @@ function FanAnimesPage({ onFooterTap }) {
         .loja-product-desc{font-size:0.78rem;color:#7a9bbf}
         .loja-product-btn{flex-shrink:0;padding:8px 16px;background:#ff6b35;border:none;border-radius:999px;color:#fff;font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s;text-decoration:none;display:inline-block}
         .loja-product-btn:hover{background:#ff8555;transform:translateY(-1px)}
-        .loja-section-label{font-size:0.68rem;color:#5a7a8a;text-transform:uppercase;letter-spacing:0.1em;margin:0 0 10px;font-weight:600}
-        .loja-section-label.ml{margin-top:22px;padding-top:18px;border-top:1px solid rgba(255,255,255,0.08)}
-        .loja-shopee-card{display:flex;flex-direction:column;gap:8px;background:linear-gradient(145deg,rgba(238,77,45,0.14) 0%,rgba(22,20,38,0.98) 55%);border:1px solid rgba(238,77,45,0.42);border-radius:14px;padding:14px 14px 16px;text-align:left;margin-bottom:4px}
-        .loja-shopee-badge{font-size:0.65rem;font-weight:800;color:#ee4d2d;letter-spacing:0.14em}
-        .loja-shopee-title{font-size:0.95rem;font-weight:700;color:#fff;line-height:1.25}
-        .loja-shopee-desc{font-size:0.74rem;color:#8b9aaf;line-height:1.45}
-        .loja-shopee-btn{display:block;width:100%;text-align:center;padding:11px 14px;background:#ee4d2d;border:none;border-radius:10px;color:#fff;font-size:0.86rem;font-weight:700;cursor:pointer;text-decoration:none;font-family:inherit;transition:transform 0.2s,box-shadow 0.2s,background 0.2s;margin-top:4px}
-        .loja-shopee-btn:hover{background:#ff5c3d;transform:translateY(-1px);box-shadow:0 6px 18px rgba(238,77,45,0.32)}
       `}</style>
 
       <div className="bg-wrap">
@@ -1370,28 +1356,8 @@ function FanAnimesPage({ onFooterTap }) {
           <div className="loja-card" onClick={(e) => e.stopPropagation()}>
             <button type="button" className="loja-close" onClick={() => setShowLoja(false)} aria-label="Fechar">×</button>
             <h2 className="loja-title">Loja Fan Animes</h2>
-            <p className="loja-subtitle">Shopee e Mercado Livre</p>
+            <p className="loja-subtitle">Mercado Livre</p>
 
-            {CONFIG.lojaShopeeCollection?.url && (
-              <>
-                <div className="loja-section-label">Shopee · coleção</div>
-                <div className="loja-shopee-card">
-                  <span className="loja-shopee-badge">SHOPEE</span>
-                  <div className="loja-shopee-title">{CONFIG.lojaShopeeCollection.title}</div>
-                  <p className="loja-shopee-desc">{CONFIG.lojaShopeeCollection.description}</p>
-                  <a
-                    href={CONFIG.lojaShopeeCollection.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="loja-shopee-btn"
-                  >
-                    Abrir
-                  </a>
-                </div>
-              </>
-            )}
-
-            <div className="loja-section-label ml">Mercado Livre · itens separados</div>
             <div className="loja-list">
               {CONFIG.lojaProducts.map((product, i) => (
                 <div key={i} className="loja-product">
