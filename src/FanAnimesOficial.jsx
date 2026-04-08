@@ -185,11 +185,16 @@ function sourceMatchesFilter(sourceVal, sourceFilter) {
 }
 
 /** Agrega linhas legadas em breakdown por platform+source (fallback). */
+function rowHitWeight(r) {
+  const n = Number(r?.hit_count);
+  return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 function buildClickBreakdownFromRows(rows) {
   const acc = new Map();
   for (const r of rows || []) {
     const k = `${r.platform || ""}\0${r.source || ""}`;
-    acc.set(k, (acc.get(k) || 0) + 1);
+    acc.set(k, (acc.get(k) || 0) + rowHitWeight(r));
   }
   return [...acc.entries()].map(([k, cnt]) => {
     const [platform, source] = k.split("\0");
@@ -201,7 +206,7 @@ function buildTodayByLinkFromRows(rows) {
   const acc = new Map();
   for (const r of rows || []) {
     const k = `${r.label || ""}\0${r.platform || ""}\0${r.source || ""}`;
-    acc.set(k, (acc.get(k) || 0) + 1);
+    acc.set(k, (acc.get(k) || 0) + rowHitWeight(r));
   }
   return [...acc.entries()].map(([k, cnt]) => {
     const [label, platform, source] = k.split("\0");
@@ -236,7 +241,7 @@ function buildPageviewBreakdownFromRows(rows) {
   const acc = new Map();
   for (const r of rows || []) {
     const s = r.source || "";
-    acc.set(s, (acc.get(s) || 0) + 1);
+    acc.set(s, (acc.get(s) || 0) + rowHitWeight(r));
   }
   return [...acc.entries()].map(([source, cnt]) => ({ source, cnt }));
 }
@@ -793,13 +798,13 @@ function Dashboard({ onExit }) {
                 CLIQUES RECENTES
               </div>
               <div style={{ fontSize: "0.65rem", color: "#3a5a6a", marginBottom: 14, lineHeight: 1.4 }}>
-                Até 10 registros de uma amostra do dia (a API não envia mais a lista completa).
+                Até 10 entradas do dia: cada linha pode agrupar vários cliques (mesmo link e origem). Totais vêm dos agregados.
                 {rangeDays !== "today" ? " Os totais acima já refletem o período selecionado." : ""}
               </div>
 
               {recentClicksFiltered.map((c, i) => (
                 <div
-                  key={`${c.clicked_at}-${i}`}
+                  key={`${c.clicked_at}-${i}-${rowHitWeight(c)}`}
                   style={{
                     display: "flex",
                     justifyContent: "space-between",
@@ -809,7 +814,12 @@ function Dashboard({ onExit }) {
                   }}
                 >
                   <div>
-                    <div style={{ fontSize: "0.78rem", color: "#d4eaf7" }}>{c.label}</div>
+                    <div style={{ fontSize: "0.78rem", color: "#d4eaf7" }}>
+                      {c.label}
+                      {rowHitWeight(c) > 1 ? (
+                        <span style={{ marginLeft: 6, color: "#5a8aaa", fontWeight: 700 }}>×{rowHitWeight(c)}</span>
+                      ) : null}
+                    </div>
                     <div style={{ fontSize: "0.65rem", color: "#4a6a7a", marginTop: 2, textTransform: "capitalize" }}>
                       {c.platform} · {c.device}
                     </div>

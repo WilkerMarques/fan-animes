@@ -2,6 +2,7 @@
 require_once __DIR__ . '/_lib/cors.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/_lib/session.php';
+require_once __DIR__ . '/_lib/stats_live.php';
 
 header('Content-Type: application/json');
 
@@ -25,22 +26,29 @@ if (!$pdo) {
 }
 
 try {
-    $today = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+    $today = todayStatDate();
 
     $stmtRecent = $pdo->prepare(
-        'SELECT page, device, source, viewed_at FROM pageviews WHERE DATE(viewed_at) = :today ORDER BY viewed_at DESC LIMIT 40'
+        'SELECT page, device, source, last_viewed_at, hit_count
+         FROM pageviews_live WHERE stat_date = :today
+         ORDER BY last_viewed_at DESC LIMIT 40'
     );
     $stmtRecent->execute(['today' => $today]);
-    $recent = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($recent as &$r) {
-        if (isset($r['viewed_at'])) {
-            $r['viewed_at'] = date('c', strtotime($r['viewed_at']));
-        }
+    $recentRaw = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
+    $recent = [];
+    foreach ($recentRaw as $r) {
+        $recent[] = [
+            'page' => $r['page'] ?? 'home',
+            'device' => $r['device'] ?? 'desktop',
+            'source' => isset($r['source']) && $r['source'] !== '' ? $r['source'] : null,
+            'viewed_at' => isset($r['last_viewed_at']) ? date('c', strtotime((string) $r['last_viewed_at'])) : null,
+            'hit_count' => max(1, (int) ($r['hit_count'] ?? 1)),
+        ];
     }
-    unset($r);
 
     $stmtTodayPv = $pdo->prepare(
-        'SELECT COALESCE(source, \'\') AS source, COUNT(*) AS cnt FROM pageviews WHERE DATE(viewed_at) = :today GROUP BY source'
+        'SELECT COALESCE(source, \'\') AS source, SUM(hit_count) AS cnt
+         FROM pageviews_live WHERE stat_date = :today GROUP BY source'
     );
     $stmtTodayPv->execute(['today' => $today]);
     $today_breakdown = $stmtTodayPv->fetchAll(PDO::FETCH_ASSOC);
@@ -67,7 +75,6 @@ try {
                 $daily[] = ['date' => $r['date'] ?? null, 'source' => '', 'total_count' => (int) ($r['total_count'] ?? 0)];
             }
         } catch (Throwable $e2) {
-            // tabela não existe
         }
     }
 

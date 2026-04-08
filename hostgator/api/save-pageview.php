@@ -1,6 +1,7 @@
 <?php
 require_once __DIR__ . '/_lib/cors.php';
 require_once __DIR__ . '/config.php';
+require_once __DIR__ . '/_lib/stats_live.php';
 
 header('Content-Type: application/json');
 
@@ -28,27 +29,20 @@ if ($source === '') {
     $source = null;
 }
 
+$sourceNorm = $source === null || $source === '' ? '' : $source;
+
 try {
-    $stmt = $pdo->prepare("INSERT INTO pageviews (page, device, source) VALUES (?, ?, ?)");
-    $stmt->execute([$page, $device, $source]);
+    $stmt = $pdo->prepare(
+        'INSERT INTO pageviews_live (stat_date, page, device, source, hit_count, last_viewed_at)
+         VALUES (?, ?, ?, ?, 1, NOW())
+         ON DUPLICATE KEY UPDATE
+           hit_count = hit_count + 1,
+           last_viewed_at = NOW()'
+    );
+    $stmt->execute([todayStatDate(), $page, $device, $sourceNorm]);
     http_response_code(200);
     echo json_encode(['ok' => true]);
 } catch (Throwable $e) {
-    $msg = $e->getMessage();
-    $code = $e->getCode();
-    // Tabela antiga sem coluna source?
-    if ($code === '42S22' || stripos($msg, 'Unknown column') !== false && stripos($msg, 'source') !== false) {
-        try {
-            $stmt = $pdo->prepare("INSERT INTO pageviews (page, device) VALUES (?, ?)");
-            $stmt->execute([$page, $device]);
-            http_response_code(200);
-            echo json_encode(['ok' => true]);
-        } catch (Throwable $e2) {
-            http_response_code(500);
-            echo json_encode(['error' => 'Erro ao salvar pageview', 'message' => $e2->getMessage()]);
-        }
-    } else {
-        http_response_code(500);
-        echo json_encode(['error' => 'Erro ao salvar pageview', 'message' => $e->getMessage()]);
-    }
+    http_response_code(500);
+    echo json_encode(['error' => 'Erro ao salvar pageview', 'message' => $e->getMessage()]);
 }
