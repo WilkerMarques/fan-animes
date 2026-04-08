@@ -4,34 +4,35 @@
 -- Use para começar limpo e testar a partir de amanhã.
 -- ============================================================
 
--- 1) Apagar tabelas (ordem: daily primeiro, depois as que recebem inserts)
 DROP TABLE IF EXISTS pageviews_daily;
 DROP TABLE IF EXISTS clicks_daily_by_link;
 DROP TABLE IF EXISTS clicks_daily;
+DROP TABLE IF EXISTS pageviews_live;
+DROP TABLE IF EXISTS clicks_live;
 DROP TABLE IF EXISTS pageviews;
 DROP TABLE IF EXISTS clicks;
 
--- 2) Criar tabelas na estrutura final
-
-CREATE TABLE clicks (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE clicks_live (
+  stat_date DATE NOT NULL,
   label VARCHAR(255) NOT NULL,
-  platform ENUM('spotify', 'youtube', 'instagram', 'tiktok', '') NOT NULL DEFAULT '',
-  device ENUM('mobile', 'desktop') NOT NULL DEFAULT 'desktop',
-  source VARCHAR(255) NULL,
-  clicked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_clicked_at (clicked_at),
-  INDEX idx_source (source)
+  platform VARCHAR(20) NOT NULL DEFAULT '',
+  source VARCHAR(255) NOT NULL DEFAULT '',
+  hit_count INT UNSIGNED NOT NULL DEFAULT 0,
+  last_device ENUM('mobile', 'desktop') NOT NULL DEFAULT 'desktop',
+  last_clicked_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (stat_date, label(120), platform, source(120)),
+  INDEX idx_stat_last (stat_date, last_clicked_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-CREATE TABLE pageviews (
-  id INT AUTO_INCREMENT PRIMARY KEY,
+CREATE TABLE pageviews_live (
+  stat_date DATE NOT NULL,
   page VARCHAR(255) NOT NULL DEFAULT 'home',
   device ENUM('mobile', 'desktop') NOT NULL DEFAULT 'desktop',
-  source VARCHAR(255) NULL,
-  viewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  INDEX idx_viewed_at (viewed_at),
-  INDEX idx_source (source)
+  source VARCHAR(255) NOT NULL DEFAULT '',
+  hit_count INT UNSIGNED NOT NULL DEFAULT 0,
+  last_viewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (stat_date, page(120), device, source(120)),
+  INDEX idx_pv_stat_last (stat_date, last_viewed_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE clicks_daily (

@@ -2,6 +2,7 @@
 require_once __DIR__ . '/_lib/cors.php';
 require_once __DIR__ . '/config.php';
 require_once __DIR__ . '/_lib/session.php';
+require_once __DIR__ . '/_lib/stats_live.php';
 
 header('Content-Type: application/json');
 
@@ -25,23 +26,30 @@ if (!$pdo) {
 }
 
 try {
-    // Só precisamos de agregados do dia atual + amostra para a lista (cron mantém clicks só com data de hoje).
-    $today = (new DateTime('now', new DateTimeZone('America/Sao_Paulo')))->format('Y-m-d');
+    $today = todayStatDate();
 
     $stmtRecent = $pdo->prepare(
-        'SELECT label, platform, device, source, clicked_at FROM clicks WHERE DATE(clicked_at) = :today ORDER BY clicked_at DESC LIMIT 40'
+        'SELECT label, platform, last_device, source, last_clicked_at, hit_count
+         FROM clicks_live WHERE stat_date = :today
+         ORDER BY last_clicked_at DESC LIMIT 40'
     );
     $stmtRecent->execute(['today' => $today]);
-    $recent = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
-    foreach ($recent as &$r) {
-        if (isset($r['clicked_at'])) {
-            $r['clicked_at'] = date('c', strtotime($r['clicked_at']));
-        }
+    $recentRaw = $stmtRecent->fetchAll(PDO::FETCH_ASSOC);
+    $recent = [];
+    foreach ($recentRaw as $r) {
+        $recent[] = [
+            'label' => $r['label'] ?? '',
+            'platform' => $r['platform'] ?? '',
+            'device' => $r['last_device'] ?? 'desktop',
+            'source' => isset($r['source']) && $r['source'] !== '' ? $r['source'] : null,
+            'clicked_at' => isset($r['last_clicked_at']) ? date('c', strtotime((string) $r['last_clicked_at'])) : null,
+            'hit_count' => max(1, (int) ($r['hit_count'] ?? 1)),
+        ];
     }
-    unset($r);
 
     $stmtTodayBreakdown = $pdo->prepare(
-        'SELECT platform, COALESCE(source, \'\') AS source, COUNT(*) AS cnt FROM clicks WHERE DATE(clicked_at) = :today GROUP BY platform, source'
+        'SELECT platform, COALESCE(source, \'\') AS source, SUM(hit_count) AS cnt
+         FROM clicks_live WHERE stat_date = :today GROUP BY platform, source'
     );
     $stmtTodayBreakdown->execute(['today' => $today]);
     $today_breakdown = $stmtTodayBreakdown->fetchAll(PDO::FETCH_ASSOC);
@@ -55,8 +63,8 @@ try {
     $today_by_link = [];
     try {
         $stmtByLinkToday = $pdo->prepare(
-            'SELECT COALESCE(label, \'\') AS label, COALESCE(platform, \'\') AS platform, COALESCE(source, \'\') AS source, COUNT(*) AS cnt
-             FROM clicks WHERE DATE(clicked_at) = :today GROUP BY label, platform, source'
+            'SELECT COALESCE(label, \'\') AS label, COALESCE(platform, \'\') AS platform, COALESCE(source, \'\') AS source, SUM(hit_count) AS cnt
+             FROM clicks_live WHERE stat_date = :today GROUP BY label, platform, source'
         );
         $stmtByLinkToday->execute(['today' => $today]);
         $today_by_link = $stmtByLinkToday->fetchAll(PDO::FETCH_ASSOC);
@@ -96,7 +104,6 @@ try {
                     $daily[] = ['date' => $r['date'] ?? null, 'platform' => '', 'source' => '', 'total_count' => (int) ($r['total_count'] ?? 0)];
                 }
             } catch (Throwable $e3) {
-                // tabela não existe
             }
         }
     }
@@ -112,7 +119,6 @@ try {
             $d['total_count'] = (int) ($d['total_count'] ?? 0);
         }
     } catch (Throwable $e) {
-        // tabela clicks_daily_by_link pode não existir (rodar migrate-clicks-daily-by-link.sql)
     }
 
     echo json_encode([
