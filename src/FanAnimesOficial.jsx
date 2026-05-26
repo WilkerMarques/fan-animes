@@ -7,7 +7,7 @@ import QRCode from "qrcode";
 const LOJA_MELI_URL = "https://meli.la/1ymUDop";
 const LOJA_MELI_QUADRO_URL = "https://meli.la/2TF6m93";
 const CONFIG = {
-  facebookPixelId: "1351617570131525",
+  facebookPixelId: "1806555573656662",
   tiktokPixelId: "D7BDNMJC77UEG1PVD70G",
   name: "FanAnimesOficial",
   bio: "🎵 Músicas criadas por IA, inspiradas em mundos de anime 🎌 Letras com alma digital e coração otaku ⚡",
@@ -1065,16 +1065,10 @@ function FanAnimesPage({ onFooterTap }) {
     img.src = CONFIG.avatarUrl;
   }, []);
 
-  const isYouTube = (icon, url) =>
-    icon === "youtube" || /youtube\.com|youtu\.be/i.test(url || "");
-
   const handleClick = (link) => {
     setClicked(link.id);
-    const isFanAnimesRapSpotify = link.id === 4; // Fan Animes Rap Spotify não aciona pixel
-    const isFanAnimesRockSpotify = link.id === 3; // Fan Animes Rock Spotify não aciona pixel
-    const isFanAnimesSadSpotify = link.id === 2;
-    const noPixel = ["instagram", "tiktok"].includes(link.icon); // TikTok e Instagram não acionam pixel (Loja e Apoie são botões que só abrem modal)
-    if (!isYouTube(link.icon, link.url) && !isFanAnimesRapSpotify && !isFanAnimesRockSpotify && !isFanAnimesSadSpotify && !noPixel) {
+    const noPixel = ["instagram", "tiktok"].includes(link.icon);
+    if (!noPixel) {
       fireClickButton(link.label, link.icon);
     }
     saveClick({ label: link.label, platform: link.icon });
@@ -1086,7 +1080,7 @@ function FanAnimesPage({ onFooterTap }) {
   };
 
   const handleSocialClick = (s) => {
-    // Ícone do YouTube (e outros socials) não acionam pixel
+    fireClickButton(`social_${s.icon}`, s.icon);
     saveClick({ label: `social_${s.icon}`, platform: s.icon });
   };
 
