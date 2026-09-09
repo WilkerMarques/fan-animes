@@ -19,7 +19,7 @@ const CONFIG = {
     { id: 5, genre: "main", label: "🔥 Fan Animes", sub: null, url: "https://www.youtube.com/watch?v=mzRLZHzeQUs&list=PL0e60EPRepdpV_2OE9RU_KQDGNeyYPAmZ", icon: "youtube", color: "#FF0000" },
     { id: 8, genre: "rap", label: "🎤 Fan Animes Rap", sub: null, url: "https://www.youtube.com/watch?v=mzRLZHzeQUs&list=PLimPNI2iN0Jf4ZazKK6sq9s0htEwGcQvy", icon: "youtube", color: "#FF0000" },
     { id: 7, genre: "rock", label: "🎸 Fan Animes Rock", sub: null, url: "https://www.youtube.com/watch?v=VSb1XQed2Eg&list=PLvnhNp1htaiGxEch5KlLCsgBoMtIktq2p", icon: "youtube", color: "#FF0000" },
-    { id: 6, genre: "sad", label: "😢 Fan Animes Sad", sub: null, url: "https://www.youtube.com/watch?v=oPuK_f57ESE&list=PLJ6M039ljFriVdwXcFK7JNLQvLjcpI12t", icon: "youtube", color: "#FF0000" },
+    { id: 6, genre: "sad", label: "😢 Fan Animes Sad", sub: null, url: "https://www.youtube.com/watch?v=-4-m8_WQOKE&list=PLJ6M039ljFriVdwXcFK7JNLQvLjcpI12t&index=2", icon: "youtube", color: "#FF0000" },
     { id: 12, genre: "sertanejo", label: "🤠 Fan Animes Sertanejo", sub: null, url: "https://www.youtube.com/watch?v=E_K7JgXwysk&list=PLMh0IjZtWn6xdoT1bMNBJ3NKE-OZkxwjw", icon: "youtube", color: "#FF0000" },
     { id: 9, genre: "social", label: "Fan Animes", sub: null, url: "https://www.instagram.com/fananimesoficial", icon: "instagram", color: "#E1306C" },
     { id: 10, genre: "social", label: "Fan Animes", sub: null, url: "https://www.tiktok.com/@fananimesoficial", icon: "tiktok", color: "#00F2EA" },
