@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS pageviews_live;
 DROP TABLE IF EXISTS clicks_live;
 DROP TABLE IF EXISTS pageviews;
 DROP TABLE IF EXISTS clicks;
+DROP TABLE IF EXISTS pixel_config;
 
 CREATE TABLE clicks_live (
   stat_date DATE NOT NULL,
@@ -60,3 +61,14 @@ CREATE TABLE pageviews_daily (
   total_count INT NOT NULL DEFAULT 0,
   UNIQUE KEY uk_date_source (date, source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE pixel_config (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+  pixel_id VARCHAR(32) NOT NULL DEFAULT '',
+  is_active TINYINT(1) NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by VARCHAR(64) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO pixel_config (id, pixel_id, is_active, updated_by)
+VALUES (1, '1736644321794726', 1, 'admin');
