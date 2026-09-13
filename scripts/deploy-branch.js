@@ -146,6 +146,7 @@ try {
     '# React / SPA routing',
     'RewriteBase /',
     'RewriteRule ^index\\.html$ - [L]',
+    'RewriteRule ^fananimes/?$ /index.html [L]',
     'RewriteCond %{REQUEST_FILENAME} !-f',
     'RewriteCond %{REQUEST_FILENAME} !-d',
     'RewriteRule . /index.html [L]',

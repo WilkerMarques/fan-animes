@@ -48,3 +48,15 @@ CREATE TABLE IF NOT EXISTS pageviews_daily (
   total_count INT NOT NULL DEFAULT 0,
   UNIQUE KEY uk_date_source (date, source)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS pixel_config (
+  id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+  pixel_id VARCHAR(32) NOT NULL DEFAULT '',
+  is_active TINYINT(1) NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by VARCHAR(64) NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO pixel_config (id, pixel_id, is_active, updated_by)
+VALUES (1, '1736644321794726', 1, 'admin')
+ON DUPLICATE KEY UPDATE id = id;

@@ -6,6 +6,11 @@ RewriteRule ^login$ login.php [L]
 RewriteRule ^logout$ logout.php [L]
 RewriteRule ^dashboard-clicks$ dashboard-clicks.php [L]
 RewriteRule ^dashboard-pageviews$ dashboard-pageviews.php [L]
+RewriteRule ^dashboard-pixel-config$ dashboard-pixel-config.php [L]
+RewriteRule ^pixel-config$ pixel-config.php [L]
 RewriteRule ^save-click$ save-click.php [L]
 RewriteRule ^save-pageview$ save-pageview.php [L]
 RewriteRule ^pix-copia-cola$ pix-copia-cola.php [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^([a-z0-9-]+)$ $1.php [L]

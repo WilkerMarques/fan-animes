@@ -6,6 +6,8 @@ import { DesktopHomeLayout } from "./home/DesktopHomeLayout";
 import { HomeLinkCard } from "./home/HomeLinkCard";
 import { YoutubeChoiceModal } from "./home/YoutubeChoiceModal";
 import { YOUTUBE_CHANNELS, getYoutubeChannel, resolveHomeLinkAction } from "./home/youtubeChannels";
+import { usePixels } from "./home/usePixels";
+import { PixelConfigSection } from "./dashboard/PixelConfigSection";
 
 // ============================================================
 // 🔧 CONFIGURAÇÃO
@@ -24,7 +26,7 @@ const CONFIG = {
     { id: 8, genre: "rap", label: "🎤 Fan Animes Rap", sub: null, url: "https://www.youtube.com/watch?v=mzRLZHzeQUs&list=PLimPNI2iN0Jf4ZazKK6sq9s0htEwGcQvy", icon: "youtube", color: "#FF0000", ...YOUTUBE_CHANNELS.rap },
     { id: 7, genre: "rock", label: "🎸 Fan Animes Rock", sub: null, url: "https://www.youtube.com/watch?v=VSb1XQed2Eg&list=PLvnhNp1htaiGxEch5KlLCsgBoMtIktq2p", icon: "youtube", color: "#FF0000", ...YOUTUBE_CHANNELS.rock },
     { id: 6, genre: "sad", label: "😢 Fan Animes Sad", sub: null, url: "https://www.youtube.com/watch?v=-4-m8_WQOKE&list=PLJ6M039ljFriVdwXcFK7JNLQvLjcpI12t&index=2", icon: "youtube", color: "#FF0000", ...YOUTUBE_CHANNELS.sad },
-    { id: 12, genre: "sertanejo", label: "🤠 Fan Animes Sertanejo", sub: null, url: "https://www.youtube.com/watch?v=E_K7JgXwysk&list=PLMh0IjZtWn6xdoT1bMNBJ3NKE-OZkxwjw", icon: "youtube", color: "#FF0000", ...YOUTUBE_CHANNELS.sertanejo },
+    { id: 12, genre: "sertanejo", label: "🤠 Fan Animes Sertanejo", sub: null, url: "https://www.youtube.com/watch?v=A0IgMeWC4mo&list=PLMh0IjZtWn6xdoT1bMNBJ3NKE-OZkxwjw&index=4", icon: "youtube", color: "#FF0000", ...YOUTUBE_CHANNELS.sertanejo },
     { id: 9, genre: "social", label: "Fan Animes", sub: null, url: "https://www.instagram.com/fananimesoficial", icon: "instagram", color: "#E1306C" },
     { id: 10, genre: "social", label: "Fan Animes", sub: null, url: "https://www.tiktok.com/@fananimesoficial", icon: "tiktok", color: "#00F2EA" },
   ],
@@ -56,33 +58,30 @@ const CONFIG = {
   communityCtaLabel: "Quero participar",
 };
 
-const SHARED_FACEBOOK_PIXEL_ID = "1736644321794726";
-
 const LANDING_DEFS = {
   home: {
-    facebookPixelId: SHARED_FACEBOOK_PIXEL_ID,
     priority: ["main", "rap", "rock", "sad", "sertanejo"],
     socialGenre: "main",
   },
   sertanejo: {
-    facebookPixelId: SHARED_FACEBOOK_PIXEL_ID,
     priority: ["sertanejo", "main", "rap", "rock", "sad"],
     socialGenre: "sertanejo",
   },
   rap: {
-    facebookPixelId: SHARED_FACEBOOK_PIXEL_ID,
     priority: ["rap", "main", "rock", "sad", "sertanejo"],
     socialGenre: "rap",
   },
   rock: {
-    facebookPixelId: SHARED_FACEBOOK_PIXEL_ID,
     priority: ["rock", "main", "rap", "sad", "sertanejo"],
     socialGenre: "rock",
   },
   sad: {
-    facebookPixelId: SHARED_FACEBOOK_PIXEL_ID,
     priority: ["sad", "main", "rap", "rock", "sertanejo"],
     socialGenre: "sad",
+  },
+  fananimes: {
+    priority: ["main", "rap", "rock", "sad", "sertanejo"],
+    socialGenre: "main",
   },
 };
 
@@ -121,7 +120,6 @@ function resolveLanding(pathname) {
   links.filter((link) => link.icon === "youtube").forEach(getYoutubeChannel);
   return {
     key,
-    facebookPixelId: def.facebookPixelId || "",
     links,
     socials: socialsForGenre(CONFIG.links, def.socialGenre),
   };
@@ -414,37 +412,6 @@ const Icons = {
 };
 
 // ============================================================
-// PIXEL HOOK
-// ============================================================
-function usePixels({ facebookPixelId }) {
-  const metaPixelId = (facebookPixelId || "").trim();
-
-  useEffect(() => {
-    if (!metaPixelId) return;
-
-    (function(f,b,e,v,n,t,s){
-      if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-      if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-      n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];s.parentNode.insertBefore(t,s);
-    })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
-    window.fbq("set", "autoConfig", false, metaPixelId);
-    window.fbq("init", metaPixelId);
-    window.fbq("track", "PageView");
-  }, [metaPixelId]);
-
-  const fireClickButton = (label, platform) => {
-    if (metaPixelId && window.fbq) {
-      window.fbq("trackCustom", "ClickButton", {
-        content_name: label,
-        content_category: platform,
-      });
-    }
-  };
-
-  return { fireClickButton };
-}
-
-// ============================================================
 // PARTICLE
 // ============================================================
 function Particle({ style }) {
@@ -499,6 +466,10 @@ function Dashboard({ onExit }) {
   const handleRefresh = useCallback(() => {
     loadDashboardData(true);
   }, [loadDashboardData]);
+
+  const handlePixelUnauthorized = useCallback(() => {
+    onExit("login");
+  }, [onExit]);
 
   const toDateStr = (date) => date.toISOString().slice(0, 10);
   const todayStr = toDateStr(new Date());
@@ -895,6 +866,7 @@ function Dashboard({ onExit }) {
             </div>
           </>
         )}
+        <PixelConfigSection onUnauthorized={handlePixelUnauthorized} />
       </div>
     </div>
   );
@@ -1052,7 +1024,9 @@ export default function App() {
 // ============================================================
 function FanAnimesPage({ onFooterTap }) {
   const landing = resolveLanding(typeof window !== "undefined" ? window.location.pathname : "/");
-  const { fireClickButton } = usePixels({ facebookPixelId: landing.facebookPixelId });
+  const { fireClickButton } = usePixels({
+    pageKey: landing.key,
+  });
   const [clicked, setClicked] = useState(null);
   const [showSupport, setShowSupport] = useState(false);
   const [showCommunity, setShowCommunity] = useState(false);

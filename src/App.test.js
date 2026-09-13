@@ -18,8 +18,16 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
+async function renderHome() {
+  const view = render(<App />);
+  await waitFor(() => {
+    expect(global.fetch).toHaveBeenCalled();
+  });
+  return view;
+}
+
 test("opens the YouTube choice modal from a channel card", async () => {
-  render(<App />);
+  await renderHome();
 
   const youtubeCards = screen.getAllByRole("button", { name: "🔥 Fan Animes" });
   await userEvent.click(youtubeCards[youtubeCards.length - 1]);
@@ -36,7 +44,7 @@ test("opens the YouTube choice modal from a channel card", async () => {
 });
 
 test("shows a different YouTube channel for each genre card", async () => {
-  render(<App />);
+  await renderHome();
 
   const cases = [
     { label: "🎤 Fan Animes Rap", name: YOUTUBE_CHANNELS.rap.name },
@@ -55,7 +63,7 @@ test("shows a different YouTube channel for each genre card", async () => {
 });
 
 test("keeps Spotify cards opening the playlist URL", async () => {
-  render(<App />);
+  await renderHome();
 
   const spotifyCard = screen.getAllByRole("button", { name: "🔥 Fan Animes" })[0];
   await userEvent.click(spotifyCard);

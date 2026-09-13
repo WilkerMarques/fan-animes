@@ -23,7 +23,7 @@ const sadChannel = {
 
 const sertanejoChannel = {
   name: YOUTUBE_CHANNELS.sertanejo.name,
-  playlistUrl: "https://www.youtube.com/watch?v=E_K7JgXwysk&list=PLMh0IjZtWn6xdoT1bMNBJ3NKE-OZkxwjw",
+  playlistUrl: "https://www.youtube.com/watch?v=A0IgMeWC4mo&list=PLMh0IjZtWn6xdoT1bMNBJ3NKE-OZkxwjw&index=4",
   subscribeUrl: YOUTUBE_CHANNELS.sertanejo.subscribeUrl,
 };
 

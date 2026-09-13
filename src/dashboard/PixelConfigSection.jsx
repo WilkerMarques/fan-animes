@@ -137,13 +137,20 @@ export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.
             />
           </label>
 
-          <label style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 16, color: "#7a9bbf", fontSize: "0.8rem" }}>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, color: "#7a9bbf", fontSize: "0.8rem" }}>
             <input
               type="checkbox"
               checked={form.active}
               onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
+              aria-label="Pixel ativo"
+              style={{ marginTop: 2 }}
             />
-            Pixel ativo
+            <span>
+              Pixel ativo
+              <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4, lineHeight: 1.4 }}>
+                Ligado: o site envia visitas e cliques para o Meta. Desligado: o ID fica salvo, mas o Pixel não roda.
+              </div>
+            </span>
           </label>
 
           {(idError || activeWithoutId) && (
