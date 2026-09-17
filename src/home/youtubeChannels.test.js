@@ -13,7 +13,7 @@ describe("youtubeChannels", () => {
     const link = {
       id: 7,
       icon: "youtube",
-      label: "🎸 Fan Animes Rock",
+      label: "Fan Animes Rock",
       url: "https://www.youtube.com/watch?v=VSb1XQed2Eg&list=PLvnhNp1htaiGxEch5KlLCsgBoMtIktq2p",
       ...YOUTUBE_CHANNELS.rock,
     };
@@ -36,7 +36,7 @@ describe("youtubeChannels", () => {
     const link = {
       id: 8,
       icon: "youtube",
-      label: "🎤 Fan Animes Rap",
+      label: "Fan Animes Rap",
       url: "https://www.youtube.com/watch?v=mzRLZHzeQUs&list=PLimPNI2iN0Jf4ZazKK6sq9s0htEwGcQvy",
       ...YOUTUBE_CHANNELS.rap,
     };
