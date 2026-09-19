@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { installMetaPixel, trackMetaPageView } from "./metaPixel";
+import { installMetaPixel, trackMetaClickButton, trackMetaPageView } from "./metaPixel";
 import { fetchPublicPixelConfig } from "./pixelConfigApi";
 
 export function resolveEnabledPixel(config) {
@@ -51,12 +51,10 @@ export function usePixels({ pageKey, fetchImpl } = {}) {
   }, [metaPixelId, pageKey]);
 
   const fireClickButton = (label, platform) => {
-    if (metaPixelId && window.fbq) {
-      window.fbq("trackCustom", "ClickButton", {
-        content_name: label,
-        content_category: platform,
-      });
+    if (!metaPixelId) {
+      return;
     }
+    trackMetaClickButton(label, platform);
   };
 
   return { fireClickButton, pixelId: metaPixelId, pixelActive: Boolean(metaPixelId) };

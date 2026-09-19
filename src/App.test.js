@@ -104,6 +104,36 @@ test("shows WhatsApp to the right of YouTube and opens the community link", asyn
   expect(icons).toEqual(["Spotify", "YouTube", "WhatsApp Comunidade"]);
 });
 
+test("does not fire ClickButton when the home page loads", async () => {
+  window.fbq = jest.fn();
+  global.fetch.mockImplementation((url) => {
+    if (String(url).includes("pixel-config")) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({ pixelId: "1736644321794726", active: true }),
+      });
+    }
+    if (String(url).includes("pix-copia-cola")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ copiaCola: "00020126fan-animes-pix" }),
+      });
+    }
+    return Promise.resolve({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    });
+  });
+
+  await renderHome();
+  await waitFor(() => {
+    expect(window.fbq).toHaveBeenCalledWith("track", "PageView");
+  });
+  expect(window.fbq).not.toHaveBeenCalledWith("trackCustom", "ClickButton", expect.anything());
+});
+
 test("fires the pixel when the header WhatsApp icon is clicked", async () => {
   window.fbq = jest.fn();
   global.fetch.mockImplementation((url) => {

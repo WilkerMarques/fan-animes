@@ -1,4 +1,4 @@
-import { installMetaPixel, trackMetaPageView } from "./metaPixel";
+import { installMetaPixel, trackMetaClickButton, trackMetaPageView } from "./metaPixel";
 
 describe("metaPixel", () => {
   beforeEach(() => {
@@ -16,6 +16,31 @@ describe("metaPixel", () => {
     installMetaPixel("1736644321794726");
     expect(document.querySelector('script[src="https://connect.facebook.net/en_US/fbevents.js"]')).toBeTruthy();
     expect(window.fbq).toHaveBeenCalledWith("init", "1736644321794726");
+  });
+
+  test("disables automatic button tracking before init", () => {
+    window.fbq = jest.fn();
+    installMetaPixel("1736644321794726");
+    expect(window.fbq.mock.calls[0]).toEqual(["set", "autoConfig", false, "1736644321794726"]);
+    expect(window.fbq.mock.calls[1]).toEqual(["init", "1736644321794726"]);
+  });
+
+  test("tracks PageView without sending ClickButton", () => {
+    window.fbq = jest.fn();
+    installMetaPixel("1736644321794726");
+    trackMetaPageView("home");
+    expect(window.fbq).toHaveBeenCalledWith("track", "PageView");
+    expect(window.fbq).not.toHaveBeenCalledWith("trackCustom", "ClickButton", expect.anything());
+  });
+
+  test("sends ClickButton only when asked", () => {
+    window.fbq = jest.fn();
+    installMetaPixel("1736644321794726");
+    trackMetaClickButton("WhatsApp Comunidade", "whatsapp");
+    expect(window.fbq).toHaveBeenCalledWith("trackCustom", "ClickButton", {
+      content_name: "WhatsApp Comunidade",
+      content_category: "whatsapp",
+    });
   });
 
   test("tracks PageView after install only once per page", () => {

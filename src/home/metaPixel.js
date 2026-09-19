@@ -45,13 +45,12 @@ export function installMetaPixel(pixelId) {
   }
 
   ensureFbqStub();
-  ensureFbeventsScript();
-
+  window.fbq("set", "autoConfig", false, id);
   if (window.__fanAnimesMetaPixelId !== id) {
-    window.fbq("set", "autoConfig", false, id);
     window.fbq("init", id);
     window.__fanAnimesMetaPixelId = id;
   }
+  ensureFbeventsScript();
 }
 
 export function trackMetaPageView(pageKey = "") {
@@ -64,4 +63,19 @@ export function trackMetaPageView(pageKey = "") {
   }
   window.__fanAnimesLastPageViewKey = key;
   window.fbq("track", "PageView");
+}
+
+export function trackMetaClickButton(label, platform) {
+  if (typeof window.fbq !== "function") {
+    throw new Error("Meta Pixel is not installed");
+  }
+  const contentName = String(label ?? "").trim();
+  const contentCategory = String(platform ?? "").trim();
+  if (!contentName || !contentCategory) {
+    throw new Error("ClickButton requires label and platform.");
+  }
+  window.fbq("trackCustom", "ClickButton", {
+    content_name: contentName,
+    content_category: contentCategory,
+  });
 }
