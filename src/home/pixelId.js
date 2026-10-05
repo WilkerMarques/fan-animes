@@ -23,3 +23,10 @@ export function canSavePixelConfig({ pixelId, active }) {
   }
   return id === "" || isValidMetaPixelId(id);
 }
+
+export function canSavePixelSlots(slots) {
+  if (!Array.isArray(slots)) {
+    return false;
+  }
+  return slots.every((slot) => canSavePixelConfig(slot));
+}

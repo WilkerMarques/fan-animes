@@ -1,8 +1,9 @@
+import { emptyPagesPixelForm } from "./landingPages";
 import {
   fetchAdminPixelConfig,
   fetchPublicPixelConfig,
   normalizePublicPixelConfig,
-  saveAdminPixelConfig,
+  saveAdminPixelPages,
 } from "./pixelConfigApi";
 
 function jsonResponse(status, body) {
@@ -13,55 +14,76 @@ function jsonResponse(status, body) {
   };
 }
 
+function adminPagesBody(overrides = {}) {
+  const form = emptyPagesPixelForm();
+  for (const [pageKey, slots] of Object.entries(overrides)) {
+    form[pageKey] = slots;
+  }
+  return {
+    pages: Object.fromEntries(
+      Object.entries(form).map(([pageKey, slots]) => [
+        pageKey,
+        {
+          slots: slots.map((slot, index) => ({
+            slot: index + 1,
+            pixelId: slot.pixelId,
+            active: slot.active,
+          })),
+          updatedAt: null,
+          updatedBy: null,
+        },
+      ])
+    ),
+  };
+}
+
 describe("pixelConfigApi", () => {
   test("normalizes a public config and ignores invalid IDs", () => {
+    expect(normalizePublicPixelConfig({ page: "rap", pixelIds: ["1736644321794726"] })).toEqual({
+      page: "rap",
+      pixelIds: ["1736644321794726"],
+    });
+    expect(normalizePublicPixelConfig({ pixelIds: ["<script>"] })).toEqual({
+      page: "home",
+      pixelIds: [],
+    });
     expect(normalizePublicPixelConfig({ pixelId: "1736644321794726", active: true })).toEqual({
-      pixelId: "1736644321794726",
-      active: true,
+      page: "home",
+      pixelIds: ["1736644321794726"],
     });
-    expect(normalizePublicPixelConfig({ pixelId: "<script>", active: true })).toEqual({
-      pixelId: "",
-      active: false,
-    });
-    expect(normalizePublicPixelConfig({})).toEqual({ pixelId: "", active: false });
   });
 
-  test("reads the public configuration", async () => {
+  test("reads the public configuration for a page", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(
-      jsonResponse(200, { pixelId: "1736644321794726", active: true })
+      jsonResponse(200, { page: "rap", pixelIds: ["1736644321794726", "1111111111111111"] })
     );
-    await expect(fetchPublicPixelConfig(fetchImpl)).resolves.toEqual({
-      pixelId: "1736644321794726",
-      active: true,
+    await expect(fetchPublicPixelConfig("rap", fetchImpl)).resolves.toEqual({
+      page: "rap",
+      pixelIds: ["1736644321794726", "1111111111111111"],
     });
+    expect(fetchImpl.mock.calls[0][0]).toContain("page=rap");
   });
 
   test("treats a missing public configuration as inactive", async () => {
-    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(200, {}));
-    await expect(fetchPublicPixelConfig(fetchImpl)).resolves.toEqual({
-      pixelId: "",
-      active: false,
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(200, { page: "home", pixelIds: [] }));
+    await expect(fetchPublicPixelConfig("home", fetchImpl)).resolves.toEqual({
+      page: "home",
+      pixelIds: [],
     });
   });
 
   test("fails when the public API is unavailable", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(500, { error: "fail" }));
-    await expect(fetchPublicPixelConfig(fetchImpl)).rejects.toThrow(/consultar/);
+    await expect(fetchPublicPixelConfig("home", fetchImpl)).rejects.toThrow(/consultar/);
   });
 
   test("loads the admin configuration when authorized", async () => {
-    const fetchImpl = jest.fn().mockResolvedValue(
-      jsonResponse(200, { pixelId: "1736644321794726", active: true, updatedAt: "2026-09-12T00:00:00-03:00", updatedBy: "admin" })
-    );
-    await expect(fetchAdminPixelConfig(fetchImpl)).resolves.toEqual({
-      unauthorized: false,
-      data: {
-        pixelId: "1736644321794726",
-        active: true,
-        updatedAt: "2026-09-12T00:00:00-03:00",
-        updatedBy: "admin",
-      },
-    });
+    const home = emptyPagesPixelForm().home;
+    home[0] = { slot: 1, pixelId: "1736644321794726", active: true };
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(200, adminPagesBody({ home })));
+    const result = await fetchAdminPixelConfig(fetchImpl);
+    expect(result.unauthorized).toBe(false);
+    expect(result.data.pages.home.slots[0].pixelId).toBe("1736644321794726");
   });
 
   test("blocks admin reads without permission", async () => {
@@ -72,23 +94,21 @@ describe("pixelConfigApi", () => {
     });
   });
 
-  test("saves an admin configuration", async () => {
-    const fetchImpl = jest.fn().mockResolvedValue(
-      jsonResponse(200, { pixelId: "1111111111111111", active: false, updatedBy: "admin" })
-    );
-    const result = await saveAdminPixelConfig({ pixelId: "1111111111111111", active: false }, fetchImpl);
-    expect(result.data.pixelId).toBe("1111111111111111");
-    expect(result.data.active).toBe(false);
-    expect(JSON.parse(fetchImpl.mock.calls[0][1].body)).toEqual({
+  test("saves admin page configurations", async () => {
+    const form = emptyPagesPixelForm();
+    form.home[0] = { slot: 1, pixelId: "1111111111111111", active: false };
+    const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(200, adminPagesBody({ home: form.home })));
+    const result = await saveAdminPixelPages(form, fetchImpl);
+    expect(result.data.pages.home.slots[0].pixelId).toBe("1111111111111111");
+    expect(JSON.parse(fetchImpl.mock.calls[0][1].body).pages.home.slots[0]).toEqual({
       pixelId: "1111111111111111",
       active: false,
+      slot: 1,
     });
   });
 
   test("rejects an invalid admin save", async () => {
     const fetchImpl = jest.fn().mockResolvedValue(jsonResponse(400, { error: "ID do Pixel inválido" }));
-    await expect(saveAdminPixelConfig({ pixelId: "abc", active: true }, fetchImpl)).rejects.toThrow(
-      "ID do Pixel inválido"
-    );
+    await expect(saveAdminPixelPages(emptyPagesPixelForm(), fetchImpl)).rejects.toThrow("ID do Pixel inválido");
   });
 });

@@ -110,7 +110,7 @@ test("does not fire ClickButton when the home page loads", async () => {
     if (String(url).includes("pixel-config")) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ pixelId: "1736644321794726", active: true }),
+        json: async () => ({ page: "home", pixelIds: ["1736644321794726"] }),
       });
     }
     if (String(url).includes("pix-copia-cola")) {
@@ -140,7 +140,7 @@ test("fires the pixel when the header WhatsApp icon is clicked", async () => {
     if (String(url).includes("pixel-config")) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ pixelId: "1736644321794726", active: true }),
+        json: async () => ({ page: "home", pixelIds: ["1736644321794726"] }),
       });
     }
     return Promise.resolve({
@@ -188,7 +188,7 @@ test("fires the pixel when the mobile WhatsApp card is clicked", async () => {
     if (String(url).includes("pixel-config")) {
       return Promise.resolve({
         ok: true,
-        json: async () => ({ pixelId: "1736644321794726", active: true }),
+        json: async () => ({ page: "home", pixelIds: ["1736644321794726"] }),
       });
     }
     return Promise.resolve({

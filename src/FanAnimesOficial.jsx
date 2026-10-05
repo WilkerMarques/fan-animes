@@ -11,7 +11,7 @@ import { YOUTUBE_CHANNELS, getYoutubeChannel, resolveHomeLinkAction } from "./ho
 import { usePixels } from "./home/usePixels";
 import { buildHeaderSocials } from "./home/headerSocials";
 import { buildMobileHomeLinks } from "./home/mobileHomeLinks";
-import { PixelConfigSection } from "./dashboard/PixelConfigSection";
+import { DashboardPixelSettings } from "./dashboard/DashboardPixelSettings";
 
 // ============================================================
 // 🔧 CONFIGURAÇÃO
@@ -426,6 +426,7 @@ function Dashboard({ onExit }) {
   const [filter, setFilter] = useState("all");
   const [rangeDays, setRangeDays] = useState("today");
   const [sourceFilter, setSourceFilter] = useState("all"); // all | facebook | tiktok (origem do pixel)
+  const [dashboardScreen, setDashboardScreen] = useState("analytics");
 
   const loadDashboardData = useCallback(async (showRefreshing = false) => {
     if (showRefreshing) setRefreshing(true);
@@ -616,6 +617,15 @@ function Dashboard({ onExit }) {
     onExit("home");
   };
 
+  if (dashboardScreen === "pixels") {
+    return (
+      <DashboardPixelSettings
+        onBack={() => setDashboardScreen("analytics")}
+        onUnauthorized={handlePixelUnauthorized}
+      />
+    );
+  }
+
   return (
     <div style={{ minHeight: "100vh", background: "#080b10", color: "#d4eaf7", fontFamily: "'Noto Sans JP',sans-serif", padding: "24px 16px 60px" }}>
       <div style={{ maxWidth: 640, margin: "0 auto" }}>
@@ -630,6 +640,28 @@ function Dashboard({ onExit }) {
           </div>
 
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button"
+              onClick={() => setDashboardScreen("pixels")}
+              aria-label="Configurações do Pixel"
+              title="Configurações do Pixel"
+              style={{
+                background: "rgba(255,255,255,0.05)",
+                border: "1px solid rgba(255,255,255,0.1)",
+                color: "#7a9bbf",
+                width: 40,
+                height: 36,
+                borderRadius: 8,
+                cursor: "pointer",
+                fontSize: "1.05rem",
+                lineHeight: 1,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              ⚙
+            </button>
             <button
               onClick={handleRefresh}
               disabled={refreshing || loading}
@@ -863,7 +895,6 @@ function Dashboard({ onExit }) {
             </div>
           </>
         )}
-        <PixelConfigSection onUnauthorized={handlePixelUnauthorized} />
       </div>
     </div>
   );

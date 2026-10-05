@@ -1,16 +1,57 @@
 import { useEffect, useMemo, useState } from "react";
-import { canSavePixelConfig, isValidMetaPixelId, normalizeMetaPixelId } from "../home/pixelId";
-import { fetchAdminPixelConfig, saveAdminPixelConfig } from "../home/pixelConfigApi";
+import {
+  emptyPagesPixelForm,
+  PIXEL_LANDING_PAGES,
+  PIXEL_LANDING_PAGE_KEYS,
+} from "../home/landingPages";
+import { canSavePixelSlots } from "../home/pixelId";
+import { fetchAdminPixelConfig, saveAdminPixelPages } from "../home/pixelConfigApi";
+import { PixelPageSlotsEditor } from "./PixelPageSlotsEditor";
 
-const emptyForm = { pixelId: "", active: false };
-
-function configsEqual(a, b) {
-  return normalizeMetaPixelId(a.pixelId) === normalizeMetaPixelId(b.pixelId) && Boolean(a.active) === Boolean(b.active);
+function adminDataToForm(data) {
+  const base = emptyPagesPixelForm();
+  if (!data?.pages) {
+    return base;
+  }
+  for (const pageKey of PIXEL_LANDING_PAGE_KEYS) {
+    const page = data.pages[pageKey];
+    if (page?.slots) {
+      base[pageKey] = page.slots.map((slot, index) => ({
+        slot: slot.slot ?? index + 1,
+        pixelId: slot.pixelId ?? "",
+        active: Boolean(slot.active),
+      }));
+    }
+  }
+  return base;
 }
 
-export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.confirm.bind(window) }) {
-  const [saved, setSaved] = useState(emptyForm);
-  const [form, setForm] = useState(emptyForm);
+function pagesFormEqual(a, b) {
+  return PIXEL_LANDING_PAGE_KEYS.every((pageKey) => {
+    const left = a[pageKey] || [];
+    const right = b[pageKey] || [];
+    if (left.length !== right.length) {
+      return false;
+    }
+    return left.every(
+      (slot, index) =>
+        slot.pixelId === right[index].pixelId && Boolean(slot.active) === Boolean(right[index].active)
+    );
+  });
+}
+
+function pageHasActiveSlot(slots) {
+  return slots.some((slot) => slot.active && slot.pixelId);
+}
+
+export function PixelConfigSection({
+  onUnauthorized,
+  confirmDeactivate = window.confirm.bind(window),
+  embedded = false,
+}) {
+  const [savedPages, setSavedPages] = useState(() => emptyPagesPixelForm());
+  const [formPages, setFormPages] = useState(() => emptyPagesPixelForm());
+  const [selectedPageKey, setSelectedPageKey] = useState("home");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
@@ -27,8 +68,9 @@ export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.
           onUnauthorized();
           return;
         }
-        setSaved(result.data);
-        setForm({ pixelId: result.data.pixelId, active: result.data.active });
+        const next = adminDataToForm(result.data);
+        setSavedPages(next);
+        setFormPages(next);
       } catch (e) {
         if (!cancelled) setError(e.message || "Não foi possível carregar a configuração do Pixel.");
       } finally {
@@ -41,22 +83,32 @@ export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.
     };
   }, [onUnauthorized]);
 
-  const dirty = useMemo(() => !configsEqual(form, saved), [form, saved]);
-  const valid = canSavePixelConfig(form);
-  const idError = form.pixelId !== "" && !isValidMetaPixelId(form.pixelId);
-  const activeWithoutId = form.active && !isValidMetaPixelId(form.pixelId);
+  const dirty = useMemo(() => !pagesFormEqual(formPages, savedPages), [formPages, savedPages]);
+  const valid = useMemo(
+    () => PIXEL_LANDING_PAGE_KEYS.every((pageKey) => canSavePixelSlots(formPages[pageKey])),
+    [formPages]
+  );
+  const selectedPage = PIXEL_LANDING_PAGES.find((page) => page.key === selectedPageKey) ?? PIXEL_LANDING_PAGES[0];
+  const selectedSlots = formPages[selectedPageKey] ?? emptyPagesPixelForm().home;
+  const selectedSavedSlots = savedPages[selectedPageKey] ?? emptyPagesPixelForm().home;
+  const selectedActiveCount = selectedSavedSlots.filter((slot) => slot.active && slot.pixelId).length;
   const canSubmit = dirty && valid && !saving && !loading;
 
   const restore = () => {
-    setForm({ pixelId: saved.pixelId, active: saved.active });
+    setFormPages(savedPages);
     setSuccess("");
     setError("");
   };
 
   const submit = async () => {
     if (!canSubmit) return;
-    if (saved.active && !form.active) {
-      const confirmed = confirmDeactivate("Desativar o Pixel? O site deixará de enviar eventos de rastreamento.");
+
+    const losingAllOnSelected =
+      pageHasActiveSlot(selectedSavedSlots) && !pageHasActiveSlot(selectedSlots);
+    if (losingAllOnSelected) {
+      const confirmed = confirmDeactivate(
+        `Desativar todos os pixels em ${selectedPage.path}? Esta página deixará de enviar eventos.`
+      );
       if (!confirmed) return;
     }
 
@@ -65,13 +117,14 @@ export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.
     setError("");
 
     try {
-      const result = await saveAdminPixelConfig(form);
+      const result = await saveAdminPixelPages(formPages);
       if (result.unauthorized) {
         onUnauthorized();
         return;
       }
-      setSaved(result.data);
-      setForm({ pixelId: result.data.pixelId, active: result.data.active });
+      const next = adminDataToForm(result.data);
+      setSavedPages(next);
+      setFormPages(next);
       setSuccess("Configuração do Pixel salva.");
     } catch (e) {
       setError(e.message || "Não foi possível salvar a configuração do Pixel.");
@@ -87,27 +140,45 @@ export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.
         border: "1px solid rgba(255,255,255,0.07)",
         borderRadius: 14,
         padding: "20px 16px",
-        marginTop: 28,
+        marginTop: embedded ? 0 : 28,
       }}
     >
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", marginBottom: 16 }}>
-        <div style={{ fontSize: "0.75rem", color: "#4a6a7a", letterSpacing: "0.05em" }}>
-          CONFIGURAÇÃO DO PIXEL
+      {!embedded && (
+        <div style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: "0.75rem", color: "#4a6a7a", letterSpacing: "0.05em", marginBottom: 6 }}>
+            CONFIGURAÇÃO DO PIXEL POR PÁGINA
+          </div>
+          <div style={{ fontSize: "0.72rem", color: "#7a9bbf", lineHeight: 1.45 }}>
+            Até 5 pixels por rota (/rap, /rock, etc.). Mantenha os que funcionam ativos e teste novos IDs nos outros slots.
+          </div>
         </div>
-        <div
-          style={{
-            fontSize: "0.68rem",
-            fontWeight: 700,
-            letterSpacing: "0.06em",
-            padding: "4px 10px",
-            borderRadius: 20,
-            color: saved.active ? "#00d4ff" : "#7a9bbf",
-            background: saved.active ? "rgba(0,212,255,0.12)" : "rgba(255,255,255,0.04)",
-            border: saved.active ? "1px solid rgba(0,212,255,0.4)" : "1px solid rgba(255,255,255,0.08)",
-          }}
-        >
-          {saved.active ? "ATIVO" : "INATIVO"}
-        </div>
+      )}
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        {PIXEL_LANDING_PAGES.map((page) => {
+          const activeOnPage = (savedPages[page.key] || []).some((slot) => slot.active && slot.pixelId);
+          const selected = page.key === selectedPageKey;
+          return (
+            <button
+              key={page.key}
+              type="button"
+              onClick={() => setSelectedPageKey(page.key)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 20,
+                border: selected ? "1px solid rgba(0,212,255,0.5)" : "1px solid rgba(255,255,255,0.1)",
+                background: selected ? "rgba(0,212,255,0.12)" : "rgba(255,255,255,0.04)",
+                color: selected ? "#00d4ff" : "#7a9bbf",
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {page.path}
+              {activeOnPage ? " •" : ""}
+            </button>
+          );
+        })}
       </div>
 
       {loading ? (
@@ -116,59 +187,43 @@ export function PixelConfigSection({ onUnauthorized, confirmDeactivate = window.
         </div>
       ) : (
         <>
-          <label style={{ display: "block", marginBottom: 14 }}>
-            <div style={{ fontSize: "0.72rem", color: "#7a9bbf", marginBottom: 6 }}>ID do Pixel</div>
-            <input
-              value={form.pixelId}
-              onChange={(e) => setForm((prev) => ({ ...prev, pixelId: e.target.value }))}
-              placeholder="Somente o ID numérico do Meta Pixel"
-              inputMode="numeric"
-              autoComplete="off"
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
+            <div style={{ fontSize: "0.8rem", color: "#d4eaf7", fontWeight: 700 }}>{selectedPage.label}</div>
+            <div
               style={{
-                width: "100%",
-                boxSizing: "border-box",
-                padding: "12px",
-                borderRadius: 10,
-                border: idError || activeWithoutId ? "1px solid #ff3e6c" : "1px solid rgba(255,255,255,0.1)",
-                background: "rgba(255,255,255,0.04)",
-                color: "#d4eaf7",
-                fontSize: "0.9rem",
+                fontSize: "0.68rem",
+                fontWeight: 700,
+                letterSpacing: "0.06em",
+                padding: "4px 10px",
+                borderRadius: 20,
+                color: selectedActiveCount > 0 ? "#00d4ff" : "#7a9bbf",
+                background: selectedActiveCount > 0 ? "rgba(0,212,255,0.12)" : "rgba(255,255,255,0.04)",
+                border:
+                  selectedActiveCount > 0 ? "1px solid rgba(0,212,255,0.4)" : "1px solid rgba(255,255,255,0.08)",
               }}
-            />
-          </label>
-
-          <label style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 8, color: "#7a9bbf", fontSize: "0.8rem" }}>
-            <input
-              type="checkbox"
-              checked={form.active}
-              onChange={(e) => setForm((prev) => ({ ...prev, active: e.target.checked }))}
-              aria-label="Pixel ativo"
-              style={{ marginTop: 2 }}
-            />
-            <span>
-              Pixel ativo
-              <div style={{ fontSize: "0.68rem", color: "#4a6a7a", marginTop: 4, lineHeight: 1.4 }}>
-                Ligado: o site envia visitas e cliques para o Meta. Desligado: o ID fica salvo, mas o Pixel não roda.
-              </div>
-            </span>
-          </label>
-
-          {(idError || activeWithoutId) && (
-            <div style={{ color: "#ff3e6c", fontSize: "0.75rem", marginBottom: 12 }}>
-              {idError
-                ? "Use só o ID numérico do Meta Pixel (10 a 20 dígitos). Scripts não são aceitos."
-                : "Informe um ID válido para ativar o Pixel."}
+            >
+              {selectedActiveCount > 0 ? `${selectedActiveCount} ATIVO(S)` : "NENHUM ATIVO"}
             </div>
-          )}
+          </div>
+
+          <PixelPageSlotsEditor
+            slots={selectedSlots}
+            disabled={saving}
+            onChange={(nextSlots) => {
+              setFormPages((prev) => ({ ...prev, [selectedPageKey]: nextSlots }));
+              setSuccess("");
+              setError("");
+            }}
+          />
 
           {success && (
-            <div style={{ color: "#34d399", fontSize: "0.75rem", marginBottom: 12 }}>{success}</div>
+            <div style={{ color: "#34d399", fontSize: "0.75rem", marginTop: 16 }}>{success}</div>
           )}
           {error && (
-            <div style={{ color: "#ff3e6c", fontSize: "0.75rem", marginBottom: 12 }}>{error}</div>
+            <div style={{ color: "#ff3e6c", fontSize: "0.75rem", marginTop: 16 }}>{error}</div>
           )}
 
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
             <button
               type="button"
               onClick={submit}

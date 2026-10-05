@@ -5,6 +5,7 @@ describe("metaPixel", () => {
     delete window.fbq;
     delete window._fbq;
     delete window.__fanAnimesMetaPixelId;
+    delete window.__fanAnimesMetaPixelIds;
     delete window.__fanAnimesLastPageViewKey;
     document.querySelectorAll('script[src="https://connect.facebook.net/en_US/fbevents.js"]').forEach((node) => {
       node.remove();

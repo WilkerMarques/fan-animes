@@ -11,6 +11,7 @@ DROP TABLE IF EXISTS pageviews_live;
 DROP TABLE IF EXISTS clicks_live;
 DROP TABLE IF EXISTS pageviews;
 DROP TABLE IF EXISTS clicks;
+DROP TABLE IF EXISTS pixel_page_config;
 DROP TABLE IF EXISTS pixel_config;
 
 CREATE TABLE clicks_live (
@@ -72,3 +73,17 @@ CREATE TABLE pixel_config (
 
 INSERT INTO pixel_config (id, pixel_id, is_active, updated_by)
 VALUES (1, '1736644321794726', 1, 'admin');
+
+CREATE TABLE pixel_page_config (
+  page_key VARCHAR(32) NOT NULL,
+  slot TINYINT UNSIGNED NOT NULL,
+  pixel_id VARCHAR(32) NOT NULL DEFAULT '',
+  is_active TINYINT(1) NOT NULL DEFAULT 0,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  updated_by VARCHAR(64) NULL,
+  PRIMARY KEY (page_key, slot),
+  CONSTRAINT chk_pixel_page_slot CHECK (slot >= 1 AND slot <= 5)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT INTO pixel_page_config (page_key, slot, pixel_id, is_active, updated_by)
+VALUES ('home', 1, '1736644321794726', 1, 'admin');

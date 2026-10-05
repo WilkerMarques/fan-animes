@@ -38,26 +38,53 @@ function ensureFbeventsScript() {
   document.head.appendChild(script);
 }
 
-export function installMetaPixel(pixelId) {
-  const id = typeof pixelId === "string" ? pixelId.trim() : "";
-  if (!id) {
-    throw new Error("Missing Meta Pixel ID");
+function ensureInstalledPixelSet() {
+  if (!(window.__fanAnimesMetaPixelIds instanceof Set)) {
+    window.__fanAnimesMetaPixelIds = new Set();
+  }
+  return window.__fanAnimesMetaPixelIds;
+}
+
+export function installMetaPixels(pixelIds) {
+  const ids = [...new Set(
+    (Array.isArray(pixelIds) ? pixelIds : [])
+      .map((id) => (typeof id === "string" ? id.trim() : ""))
+      .filter(Boolean)
+  )];
+  if (ids.length === 0) {
+    return;
   }
 
   ensureFbqStub();
-  window.fbq("set", "autoConfig", false, id);
-  if (window.__fanAnimesMetaPixelId !== id) {
-    window.fbq("init", id);
-    window.__fanAnimesMetaPixelId = id;
+  const installed = ensureInstalledPixelSet();
+  for (const id of ids) {
+    window.fbq("set", "autoConfig", false, id);
+    if (!installed.has(id)) {
+      window.fbq("init", id);
+      installed.add(id);
+    }
+  }
+  if (ids.length === 1) {
+    window.__fanAnimesMetaPixelId = ids[0];
   }
   ensureFbeventsScript();
+}
+
+export function installMetaPixel(pixelId) {
+  installMetaPixels([pixelId]);
+}
+
+function pageViewDedupeKey(pageKey) {
+  const installed = ensureInstalledPixelSet();
+  const ids = [...installed].sort().join(",");
+  return `${ids}:${pageKey}`;
 }
 
 export function trackMetaPageView(pageKey = "") {
   if (typeof window.fbq !== "function") {
     throw new Error("Meta Pixel is not installed");
   }
-  const key = `${window.__fanAnimesMetaPixelId || ""}:${pageKey}`;
+  const key = pageViewDedupeKey(pageKey);
   if (window.__fanAnimesLastPageViewKey === key) {
     return;
   }

@@ -1,61 +1,70 @@
-import { useEffect, useState } from "react";
-import { installMetaPixel, trackMetaClickButton, trackMetaPageView } from "./metaPixel";
+import { useEffect, useMemo, useState } from "react";
+import { installMetaPixels, trackMetaClickButton, trackMetaPageView } from "./metaPixel";
 import { fetchPublicPixelConfig } from "./pixelConfigApi";
+import { normalizePixelPageKey } from "./landingPages";
 
-export function resolveEnabledPixel(config) {
-  if (!config || !config.active || !config.pixelId) {
-    return "";
+export function resolveEnabledPixelIds(config) {
+  if (!config || !Array.isArray(config.pixelIds)) {
+    return [];
   }
-  return config.pixelId;
+  return config.pixelIds.filter((id) => typeof id === "string" && id.trim() !== "");
 }
 
 export function usePixels({ pageKey, fetchImpl } = {}) {
-  const [config, setConfig] = useState({ pixelId: "", active: false });
+  const normalizedPageKey = normalizePixelPageKey(pageKey);
+  const [config, setConfig] = useState({ page: normalizedPageKey, pixelIds: [] });
 
   useEffect(() => {
     let cancelled = false;
 
-    fetchPublicPixelConfig(fetchImpl)
+    fetchPublicPixelConfig(normalizedPageKey, fetchImpl)
       .then((next) => {
         if (!cancelled) setConfig(next);
       })
       .catch(() => {
-        if (!cancelled) setConfig({ pixelId: "", active: false });
+        if (!cancelled) setConfig({ page: normalizedPageKey, pixelIds: [] });
       });
 
     return () => {
       cancelled = true;
     };
-  }, [fetchImpl]);
+  }, [fetchImpl, normalizedPageKey]);
 
-  const metaPixelId = resolveEnabledPixel(config);
-
-  useEffect(() => {
-    if (!metaPixelId) return;
-
-    installMetaPixel(metaPixelId);
-    trackMetaPageView(pageKey);
-  }, [metaPixelId, pageKey]);
+  const metaPixelIds = useMemo(() => resolveEnabledPixelIds(config), [config]);
+  const metaPixelIdsKey = metaPixelIds.join(",");
+  const metaPixelActive = metaPixelIds.length > 0;
 
   useEffect(() => {
-    if (!metaPixelId) return;
+    if (!metaPixelActive) return;
+
+    installMetaPixels(metaPixelIds);
+    trackMetaPageView(normalizedPageKey);
+  }, [metaPixelIds, metaPixelIdsKey, metaPixelActive, normalizedPageKey]);
+
+  useEffect(() => {
+    if (!metaPixelActive) return;
 
     function onPageShow(event) {
       if (!event.persisted) return;
-      installMetaPixel(metaPixelId);
-      trackMetaPageView(pageKey);
+      installMetaPixels(metaPixelIds);
+      trackMetaPageView(normalizedPageKey);
     }
 
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
-  }, [metaPixelId, pageKey]);
+  }, [metaPixelIds, metaPixelIdsKey, metaPixelActive, normalizedPageKey]);
 
   const fireClickButton = (label, platform) => {
-    if (!metaPixelId) {
+    if (!metaPixelActive) {
       return;
     }
     trackMetaClickButton(label, platform);
   };
 
-  return { fireClickButton, pixelId: metaPixelId, pixelActive: Boolean(metaPixelId) };
+  return {
+    fireClickButton,
+    pixelId: metaPixelIds[0] || "",
+    pixelIds: metaPixelIds,
+    pixelActive: metaPixelActive,
+  };
 }

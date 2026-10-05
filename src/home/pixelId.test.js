@@ -1,4 +1,4 @@
-import { canSavePixelConfig, isValidMetaPixelId, normalizeMetaPixelId } from "./pixelId";
+import { canSavePixelConfig, canSavePixelSlots, isValidMetaPixelId, normalizeMetaPixelId } from "./pixelId";
 
 describe("pixelId", () => {
   test("accepts a numeric Meta Pixel ID", () => {
@@ -19,5 +19,9 @@ describe("pixelId", () => {
     expect(canSavePixelConfig({ pixelId: "", active: false })).toBe(true);
     expect(canSavePixelConfig({ pixelId: "", active: true })).toBe(false);
     expect(canSavePixelConfig({ pixelId: "1736644321794726", active: true })).toBe(true);
+    expect(canSavePixelSlots([{ pixelId: "", active: false }, { pixelId: "1736644321794726", active: true }])).toBe(
+      true
+    );
+    expect(canSavePixelSlots([{ pixelId: "bad", active: true }])).toBe(false);
   });
 });

@@ -14,21 +14,19 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 }
 
 global $pdo;
+$pageKey = normalizePixelPageKey($_GET['page'] ?? 'home');
+
 if (!$pdo) {
-    echo json_encode(['pixelId' => '', 'active' => false]);
+    echo json_encode(['page' => $pageKey, 'pixelIds' => []]);
     exit;
 }
 
 try {
     if (pixelConfigTableMissing($pdo)) {
-        echo json_encode(['pixelId' => '', 'active' => false]);
+        echo json_encode(['page' => $pageKey, 'pixelIds' => []]);
         exit;
     }
-    $config = readPixelConfig($pdo);
-    echo json_encode([
-        'pixelId' => $config['pixelId'],
-        'active' => $config['active'],
-    ]);
+    echo json_encode(readPublicPagePixelConfig($pdo, $pageKey));
 } catch (Throwable $e) {
-    echo json_encode(['pixelId' => '', 'active' => false]);
+    echo json_encode(['page' => $pageKey, 'pixelIds' => []]);
 }
