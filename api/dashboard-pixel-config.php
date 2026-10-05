@@ -28,13 +28,15 @@ if (!$pdo) {
 
 if (pixelConfigTableMissing($pdo)) {
     http_response_code(500);
-    echo json_encode(['error' => 'Tabela pixel_config não existe. Rode hostgator/api/migrate-pixel-config.sql no banco.']);
+    echo json_encode([
+        'error' => 'Tabela pixel_page_config não existe. Rode hostgator/api/migrate-pixel-pages.sql no banco.',
+    ]);
     exit;
 }
 
 try {
     if ($_SERVER['REQUEST_METHOD'] === 'GET') {
-        echo json_encode(readPixelConfig($pdo));
+        echo json_encode(readAdminAllPagePixelConfigs($pdo));
         exit;
     }
 
@@ -45,11 +47,22 @@ try {
         exit;
     }
 
-    $pixelId = isset($body['pixelId']) ? $body['pixelId'] : '';
-    $active = !empty($body['active']);
+    if (isset($body['pages']) && is_array($body['pages'])) {
+        $saved = saveAllPagePixelConfigs($pdo, $body['pages'], 'admin');
+        echo json_encode($saved);
+        exit;
+    }
 
-    $saved = savePixelConfig($pdo, $pixelId, $active, 'admin');
-    echo json_encode($saved);
+    if (isset($body['pixelId'])) {
+        $pixelId = isset($body['pixelId']) ? $body['pixelId'] : '';
+        $active = !empty($body['active']);
+        savePixelConfig($pdo, $pixelId, $active, 'admin');
+        echo json_encode(readAdminAllPagePixelConfigs($pdo));
+        exit;
+    }
+
+    http_response_code(400);
+    echo json_encode(['error' => 'Envie pages com slots ou pixelId legado.']);
 } catch (InvalidArgumentException $e) {
     http_response_code(400);
     echo json_encode(['error' => $e->getMessage()]);
