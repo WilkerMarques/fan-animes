@@ -1,3 +1,5 @@
+export const PIXEL_ID_MAX_LENGTH = 128;
+
 export function normalizeMetaPixelId(value) {
   if (typeof value !== "string") {
     return "";
@@ -10,10 +12,16 @@ export function isValidMetaPixelId(value) {
   if (!id) {
     return false;
   }
-  if (/[<>]|script|fbq|function|javascript:/i.test(id)) {
+  if (id.length > PIXEL_ID_MAX_LENGTH) {
     return false;
   }
-  return /^\d{10,20}$/.test(id);
+  if (/[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(id)) {
+    return false;
+  }
+  if (/[<>]|script|javascript:|vbscript:|data:|onerror=/i.test(id)) {
+    return false;
+  }
+  return true;
 }
 
 export function canSavePixelConfig({ pixelId, active }) {

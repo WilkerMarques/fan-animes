@@ -34,7 +34,7 @@ export function DashboardPixelSettings({ onBack, onUnauthorized }) {
               CONFIGURAÇÃO DO PIXEL
             </div>
             <div style={{ fontSize: "0.72rem", color: "#4a6a7a", marginTop: 4 }}>
-              Meta Pixel por página · até 5 IDs por rota
+              Meta e ChatGPT/OpenAI · 5 IDs por rota e por plataforma
             </div>
           </div>
           <button

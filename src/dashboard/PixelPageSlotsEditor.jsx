@@ -1,9 +1,12 @@
-import { isValidMetaPixelId, normalizeMetaPixelId } from "../home/pixelId";
+import { isValidMetaPixelId, normalizeMetaPixelId, PIXEL_ID_MAX_LENGTH } from "../home/pixelId";
 
 function slotFieldError(slot) {
   const id = normalizeMetaPixelId(slot.pixelId);
   if (id !== "" && !isValidMetaPixelId(id)) {
-    return "Use só o ID numérico (10 a 20 dígitos).";
+    if (id.length > PIXEL_ID_MAX_LENGTH) {
+      return `Use no máximo ${PIXEL_ID_MAX_LENGTH} caracteres.`;
+    }
+    return "ID inválido. Não use tags HTML, scripts ou javascript:.";
   }
   if (slot.active && !isValidMetaPixelId(id)) {
     return "Informe um ID válido para ativar este slot.";
@@ -11,7 +14,11 @@ function slotFieldError(slot) {
   return "";
 }
 
-export function PixelPageSlotsEditor({ slots, onChange, disabled }) {
+export function PixelPageSlotsEditor({ slots, onChange, disabled, providerKey = "meta" }) {
+  const placeholder =
+    providerKey === "openai"
+      ? "ID OpenAI (ex.: MCJXHhHwXwLQLYxMWbCEAs)"
+      : "ID Meta (ex.: 1736644321794726)";
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
       {slots.map((slot, index) => {
@@ -38,8 +45,8 @@ export function PixelPageSlotsEditor({ slots, onChange, disabled }) {
                 );
                 onChange(next);
               }}
-              placeholder="ID numérico do Meta Pixel"
-              inputMode="numeric"
+              placeholder={placeholder}
+              maxLength={PIXEL_ID_MAX_LENGTH}
               autoComplete="off"
               style={{
                 width: "100%",

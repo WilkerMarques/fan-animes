@@ -3,6 +3,8 @@ import {
   emptyPagesPixelForm,
   PIXEL_LANDING_PAGES,
   PIXEL_LANDING_PAGE_KEYS,
+  PIXEL_PROVIDERS,
+  PIXEL_PROVIDER_KEYS,
 } from "../home/landingPages";
 import { canSavePixelSlots } from "../home/pixelId";
 import { fetchAdminPixelConfig, saveAdminPixelPages } from "../home/pixelConfigApi";
@@ -15,8 +17,15 @@ function adminDataToForm(data) {
   }
   for (const pageKey of PIXEL_LANDING_PAGE_KEYS) {
     const page = data.pages[pageKey];
-    if (page?.slots) {
-      base[pageKey] = page.slots.map((slot, index) => ({
+    if (!page?.providers) {
+      continue;
+    }
+    for (const providerKey of PIXEL_PROVIDER_KEYS) {
+      const slots = page.providers[providerKey]?.slots;
+      if (!Array.isArray(slots)) {
+        continue;
+      }
+      base[pageKey][providerKey] = slots.map((slot, index) => ({
         slot: slot.slot ?? index + 1,
         pixelId: slot.pixelId ?? "",
         active: Boolean(slot.active),
@@ -26,22 +35,30 @@ function adminDataToForm(data) {
   return base;
 }
 
-function pagesFormEqual(a, b) {
-  return PIXEL_LANDING_PAGE_KEYS.every((pageKey) => {
-    const left = a[pageKey] || [];
-    const right = b[pageKey] || [];
-    if (left.length !== right.length) {
-      return false;
-    }
-    return left.every(
-      (slot, index) =>
-        slot.pixelId === right[index].pixelId && Boolean(slot.active) === Boolean(right[index].active)
-    );
-  });
+function slotsEqual(left, right) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (slot, index) =>
+      slot.pixelId === right[index].pixelId && Boolean(slot.active) === Boolean(right[index].active)
+  );
 }
 
-function pageHasActiveSlot(slots) {
-  return slots.some((slot) => slot.active && slot.pixelId);
+function pagesFormEqual(a, b) {
+  return PIXEL_LANDING_PAGE_KEYS.every((pageKey) =>
+    PIXEL_PROVIDER_KEYS.every((providerKey) =>
+      slotsEqual(a[pageKey]?.[providerKey] ?? [], b[pageKey]?.[providerKey] ?? [])
+    )
+  );
+}
+
+function pageActiveCount(providersForm) {
+  return PIXEL_PROVIDER_KEYS.reduce(
+    (total, providerKey) =>
+      total + (providersForm[providerKey] ?? []).filter((slot) => slot.active && slot.pixelId).length,
+    0
+  );
 }
 
 export function PixelConfigSection({
@@ -52,6 +69,7 @@ export function PixelConfigSection({
   const [savedPages, setSavedPages] = useState(() => emptyPagesPixelForm());
   const [formPages, setFormPages] = useState(() => emptyPagesPixelForm());
   const [selectedPageKey, setSelectedPageKey] = useState("home");
+  const [selectedProviderKey, setSelectedProviderKey] = useState("meta");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState("");
@@ -85,12 +103,18 @@ export function PixelConfigSection({
 
   const dirty = useMemo(() => !pagesFormEqual(formPages, savedPages), [formPages, savedPages]);
   const valid = useMemo(
-    () => PIXEL_LANDING_PAGE_KEYS.every((pageKey) => canSavePixelSlots(formPages[pageKey])),
+    () =>
+      PIXEL_LANDING_PAGE_KEYS.every((pageKey) =>
+        PIXEL_PROVIDER_KEYS.every((providerKey) => canSavePixelSlots(formPages[pageKey]?.[providerKey]))
+      ),
     [formPages]
   );
   const selectedPage = PIXEL_LANDING_PAGES.find((page) => page.key === selectedPageKey) ?? PIXEL_LANDING_PAGES[0];
-  const selectedSlots = formPages[selectedPageKey] ?? emptyPagesPixelForm().home;
-  const selectedSavedSlots = savedPages[selectedPageKey] ?? emptyPagesPixelForm().home;
+  const selectedProvider =
+    PIXEL_PROVIDERS.find((provider) => provider.key === selectedProviderKey) ?? PIXEL_PROVIDERS[0];
+  const selectedSlots = formPages[selectedPageKey]?.[selectedProviderKey] ?? emptyPagesPixelForm().home.meta;
+  const selectedSavedPage = savedPages[selectedPageKey] ?? emptyPagesPixelForm().home;
+  const selectedSavedSlots = selectedSavedPage[selectedProviderKey] ?? emptyPagesPixelForm().home.meta;
   const selectedActiveCount = selectedSavedSlots.filter((slot) => slot.active && slot.pixelId).length;
   const canSubmit = dirty && valid && !saving && !loading;
 
@@ -103,11 +127,11 @@ export function PixelConfigSection({
   const submit = async () => {
     if (!canSubmit) return;
 
-    const losingAllOnSelected =
-      pageHasActiveSlot(selectedSavedSlots) && !pageHasActiveSlot(selectedSlots);
-    if (losingAllOnSelected) {
+    const hadActiveOnProvider = selectedSavedSlots.some((slot) => slot.active && slot.pixelId);
+    const hasActiveOnProvider = selectedSlots.some((slot) => slot.active && slot.pixelId);
+    if (hadActiveOnProvider && !hasActiveOnProvider) {
       const confirmed = confirmDeactivate(
-        `Desativar todos os pixels em ${selectedPage.path}? Esta página deixará de enviar eventos.`
+        `Desativar todos os pixels ${selectedProvider.label} em ${selectedPage.path}?`
       );
       if (!confirmed) return;
     }
@@ -149,14 +173,14 @@ export function PixelConfigSection({
             CONFIGURAÇÃO DO PIXEL POR PÁGINA
           </div>
           <div style={{ fontSize: "0.72rem", color: "#7a9bbf", lineHeight: 1.45 }}>
-            Até 5 pixels por rota (/rap, /rock, etc.). Mantenha os que funcionam ativos e teste novos IDs nos outros slots.
+            Até 5 IDs por rota para Meta e para ChatGPT/OpenAI. Ex.: OpenAI usa só o pixelId (MCJXHhHwXwLQLYxMWbCEAs), não o script inteiro.
           </div>
         </div>
       )}
 
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
         {PIXEL_LANDING_PAGES.map((page) => {
-          const activeOnPage = (savedPages[page.key] || []).some((slot) => slot.active && slot.pixelId);
+          const activeOnPage = pageActiveCount(savedPages[page.key] ?? emptyPagesPixelForm().home) > 0;
           const selected = page.key === selectedPageKey;
           return (
             <button
@@ -181,6 +205,39 @@ export function PixelConfigSection({
         })}
       </div>
 
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 16 }}>
+        {PIXEL_PROVIDERS.map((provider) => {
+          const activeOnProvider = (savedPages[selectedPageKey]?.[provider.key] ?? []).some(
+            (slot) => slot.active && slot.pixelId
+          );
+          const selected = provider.key === selectedProviderKey;
+          const accent =
+            provider.key === "openai"
+              ? { border: "rgba(16,185,129,0.5)", bg: "rgba(16,185,129,0.12)", color: "#34d399" }
+              : { border: "rgba(168,85,247,0.5)", bg: "rgba(168,85,247,0.12)", color: "#c4b5fd" };
+          return (
+            <button
+              key={provider.key}
+              type="button"
+              onClick={() => setSelectedProviderKey(provider.key)}
+              style={{
+                padding: "6px 12px",
+                borderRadius: 20,
+                border: selected ? `1px solid ${accent.border}` : "1px solid rgba(255,255,255,0.1)",
+                background: selected ? accent.bg : "rgba(255,255,255,0.04)",
+                color: selected ? accent.color : "#7a9bbf",
+                fontSize: "0.72rem",
+                fontWeight: 700,
+                cursor: "pointer",
+              }}
+            >
+              {provider.label}
+              {activeOnProvider ? " •" : ""}
+            </button>
+          );
+        })}
+      </div>
+
       {loading ? (
         <div style={{ color: "#4a6a7a", fontSize: "0.8rem", textAlign: "center", padding: 20 }}>
           Carregando configuração...
@@ -188,7 +245,9 @@ export function PixelConfigSection({
       ) : (
         <>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: "0.8rem", color: "#d4eaf7", fontWeight: 700 }}>{selectedPage.label}</div>
+            <div style={{ fontSize: "0.8rem", color: "#d4eaf7", fontWeight: 700 }}>
+              {selectedPage.label} · {selectedProvider.label}
+            </div>
             <div
               style={{
                 fontSize: "0.68rem",
@@ -208,9 +267,16 @@ export function PixelConfigSection({
 
           <PixelPageSlotsEditor
             slots={selectedSlots}
+            providerKey={selectedProviderKey}
             disabled={saving}
             onChange={(nextSlots) => {
-              setFormPages((prev) => ({ ...prev, [selectedPageKey]: nextSlots }));
+              setFormPages((prev) => ({
+                ...prev,
+                [selectedPageKey]: {
+                  ...prev[selectedPageKey],
+                  [selectedProviderKey]: nextSlots,
+                },
+              }));
               setSuccess("");
               setError("");
             }}

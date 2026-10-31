@@ -1,18 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { installMetaPixels, trackMetaClickButton, trackMetaPageView } from "./metaPixel";
+import { installOpenAiPixels, trackOpenAiClickButton, trackOpenAiPageView } from "./openAiPixel";
 import { fetchPublicPixelConfig } from "./pixelConfigApi";
 import { normalizePixelPageKey } from "./landingPages";
 
-export function resolveEnabledPixelIds(config) {
-  if (!config || !Array.isArray(config.pixelIds)) {
+export function resolveProviderPixelIds(config, provider) {
+  if (!config) {
     return [];
   }
-  return config.pixelIds.filter((id) => typeof id === "string" && id.trim() !== "");
+  const bucket = config[provider]?.pixelIds;
+  if (Array.isArray(bucket)) {
+    return bucket.filter((id) => typeof id === "string" && id.trim() !== "");
+  }
+  if (provider === "meta" && Array.isArray(config.pixelIds)) {
+    return config.pixelIds.filter((id) => typeof id === "string" && id.trim() !== "");
+  }
+  return [];
 }
 
 export function usePixels({ pageKey, fetchImpl } = {}) {
   const normalizedPageKey = normalizePixelPageKey(pageKey);
-  const [config, setConfig] = useState({ page: normalizedPageKey, pixelIds: [] });
+  const [config, setConfig] = useState({
+    page: normalizedPageKey,
+    meta: { pixelIds: [] },
+    openai: { pixelIds: [] },
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -22,7 +34,13 @@ export function usePixels({ pageKey, fetchImpl } = {}) {
         if (!cancelled) setConfig(next);
       })
       .catch(() => {
-        if (!cancelled) setConfig({ page: normalizedPageKey, pixelIds: [] });
+        if (!cancelled) {
+          setConfig({
+            page: normalizedPageKey,
+            meta: { pixelIds: [] },
+            openai: { pixelIds: [] },
+          });
+        }
       });
 
     return () => {
@@ -30,41 +48,75 @@ export function usePixels({ pageKey, fetchImpl } = {}) {
     };
   }, [fetchImpl, normalizedPageKey]);
 
-  const metaPixelIds = useMemo(() => resolveEnabledPixelIds(config), [config]);
+  const metaPixelIds = useMemo(() => resolveProviderPixelIds(config, "meta"), [config]);
+  const openAiPixelIds = useMemo(() => resolveProviderPixelIds(config, "openai"), [config]);
   const metaPixelIdsKey = metaPixelIds.join(",");
+  const openAiPixelIdsKey = openAiPixelIds.join(",");
   const metaPixelActive = metaPixelIds.length > 0;
+  const openAiPixelActive = openAiPixelIds.length > 0;
+  const pixelActive = metaPixelActive || openAiPixelActive;
 
   useEffect(() => {
-    if (!metaPixelActive) return;
-
-    installMetaPixels(metaPixelIds);
-    trackMetaPageView(normalizedPageKey);
-  }, [metaPixelIds, metaPixelIdsKey, metaPixelActive, normalizedPageKey]);
+    if (metaPixelActive) {
+      installMetaPixels(metaPixelIds);
+      trackMetaPageView(normalizedPageKey);
+    }
+    if (openAiPixelActive) {
+      installOpenAiPixels(openAiPixelIds);
+      trackOpenAiPageView(normalizedPageKey);
+    }
+  }, [
+    metaPixelIds,
+    metaPixelIdsKey,
+    metaPixelActive,
+    openAiPixelIds,
+    openAiPixelIdsKey,
+    openAiPixelActive,
+    normalizedPageKey,
+  ]);
 
   useEffect(() => {
-    if (!metaPixelActive) return;
+    if (!pixelActive) return;
 
     function onPageShow(event) {
       if (!event.persisted) return;
-      installMetaPixels(metaPixelIds);
-      trackMetaPageView(normalizedPageKey);
+      if (metaPixelActive) {
+        installMetaPixels(metaPixelIds);
+        trackMetaPageView(normalizedPageKey);
+      }
+      if (openAiPixelActive) {
+        installOpenAiPixels(openAiPixelIds);
+        trackOpenAiPageView(normalizedPageKey);
+      }
     }
 
     window.addEventListener("pageshow", onPageShow);
     return () => window.removeEventListener("pageshow", onPageShow);
-  }, [metaPixelIds, metaPixelIdsKey, metaPixelActive, normalizedPageKey]);
+  }, [
+    metaPixelIds,
+    metaPixelIdsKey,
+    metaPixelActive,
+    openAiPixelIds,
+    openAiPixelIdsKey,
+    openAiPixelActive,
+    normalizedPageKey,
+    pixelActive,
+  ]);
 
   const fireClickButton = (label, platform) => {
-    if (!metaPixelActive) {
-      return;
+    if (metaPixelActive) {
+      trackMetaClickButton(label, platform);
     }
-    trackMetaClickButton(label, platform);
+    if (openAiPixelActive) {
+      trackOpenAiClickButton(label, platform);
+    }
   };
 
   return {
     fireClickButton,
-    pixelId: metaPixelIds[0] || "",
+    pixelId: metaPixelIds[0] || openAiPixelIds[0] || "",
     pixelIds: metaPixelIds,
-    pixelActive: metaPixelActive,
+    openAiPixelIds,
+    pixelActive,
   };
 }

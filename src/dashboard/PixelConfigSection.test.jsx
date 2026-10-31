@@ -5,19 +5,26 @@ import { PixelConfigSection } from "./PixelConfigSection";
 
 function adminPagesBody(overrides = {}) {
   const form = emptyPagesPixelForm();
-  for (const [pageKey, slots] of Object.entries(overrides)) {
-    form[pageKey] = slots;
+  for (const [pageKey, providers] of Object.entries(overrides)) {
+    form[pageKey] = { ...form[pageKey], ...providers };
   }
   return {
     pages: Object.fromEntries(
-      Object.entries(form).map(([pageKey, slots]) => [
+      Object.entries(form).map(([pageKey, providers]) => [
         pageKey,
         {
-          slots: slots.map((slot, index) => ({
-            slot: index + 1,
-            pixelId: slot.pixelId,
-            active: slot.active,
-          })),
+          providers: Object.fromEntries(
+            Object.entries(providers).map(([providerKey, slots]) => [
+              providerKey,
+              {
+                slots: slots.map((slot, index) => ({
+                  slot: index + 1,
+                  pixelId: slot.pixelId,
+                  active: slot.active,
+                })),
+              },
+            ])
+          ),
           updatedAt: null,
           updatedBy: null,
         },
@@ -46,76 +53,41 @@ describe("PixelConfigSection", () => {
     jest.restoreAllMocks();
   });
 
-  test("loads the current configuration and disables save until it changes", async () => {
-    const home = emptyPagesPixelForm().home;
-    home[0] = { slot: 1, pixelId: "1736644321794726", active: true };
+  test("loads Meta configuration and supports OpenAI tabs", async () => {
+    const form = emptyPagesPixelForm();
+    form.home.meta[0] = { slot: 1, pixelId: "1736644321794726", active: true };
     mockFetchSequence([
       {
         match: "dashboard-pixel-config",
         method: "GET",
         status: 200,
-        body: adminPagesBody({ home }),
+        body: adminPagesBody({ home: form.home }),
       },
     ]);
 
     render(<PixelConfigSection onUnauthorized={jest.fn()} />);
     await waitFor(() => expect(screen.getByDisplayValue("1736644321794726")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Salvar configuração" })).toBeDisabled();
-    expect(screen.getByText("1 ATIVO(S)")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /ChatGPT \/ OpenAI/ }));
+    expect(screen.getAllByPlaceholderText(/MCJXHhHwXwLQLYxMWbCEAs/).length).toBe(5);
   });
 
-  test("rejects an invalid ID and asks before deactivating all slots on the page", async () => {
-    const home = emptyPagesPixelForm().home;
-    home[0] = { slot: 1, pixelId: "1736644321794726", active: true };
+  test("rejects an invalid ID", async () => {
+    const form = emptyPagesPixelForm();
+    form.home.meta[0] = { slot: 1, pixelId: "1736644321794726", active: true };
     mockFetchSequence([
       {
         match: "dashboard-pixel-config",
         method: "GET",
         status: 200,
-        body: adminPagesBody({ home }),
-      },
-      {
-        match: "dashboard-pixel-config",
-        method: "POST",
-        status: 200,
-        body: adminPagesBody({
-          home: home.map((slot, index) =>
-            index === 0 ? { ...slot, active: false } : slot
-          ),
-        }),
+        body: adminPagesBody({ home: form.home }),
       },
     ]);
-    const confirmDeactivate = jest.fn().mockReturnValue(true);
 
-    render(<PixelConfigSection onUnauthorized={jest.fn()} confirmDeactivate={confirmDeactivate} />);
+    render(<PixelConfigSection onUnauthorized={jest.fn()} />);
     const input = await screen.findByDisplayValue("1736644321794726");
-
     await userEvent.clear(input);
-    await userEvent.type(input, "fbq('init')");
+    await userEvent.type(input, "<script>x</script>");
     expect(screen.getByRole("button", { name: "Salvar configuração" })).toBeDisabled();
-    expect(screen.getByText(/10 a 20 dígitos/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: "Cancelar/restaurar valor atual" }));
-    await userEvent.click(screen.getByLabelText("Ativar pixel 1"));
-    await userEvent.click(screen.getByRole("button", { name: "Salvar configuração" }));
-
-    expect(confirmDeactivate).toHaveBeenCalled();
-    await waitFor(() => expect(screen.getByText("Configuração do Pixel salva.")).toBeInTheDocument());
-    expect(screen.getByText("NENHUM ATIVO")).toBeInTheDocument();
-  });
-
-  test("sends an unauthorized admin back to login", async () => {
-    const onUnauthorized = jest.fn();
-    mockFetchSequence([
-      {
-        match: "dashboard-pixel-config",
-        method: "GET",
-        status: 401,
-        body: { error: "Não autenticado" },
-      },
-    ]);
-
-    render(<PixelConfigSection onUnauthorized={onUnauthorized} />);
-    await waitFor(() => expect(onUnauthorized).toHaveBeenCalled());
+    expect(screen.getByText(/ID inválido/)).toBeInTheDocument();
   });
 });

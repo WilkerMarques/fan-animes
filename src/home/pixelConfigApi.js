@@ -1,6 +1,7 @@
 import {
   emptyPagesPixelForm,
   normalizePixelPageKey,
+  PIXEL_PROVIDER_KEYS,
   PIXEL_SLOTS_PER_PAGE,
 } from "./landingPages";
 import { isValidMetaPixelId, normalizeMetaPixelId } from "./pixelId";
@@ -37,18 +38,46 @@ export function normalizePagePixelSlots(slots) {
   );
 }
 
+function normalizeProviderPixelIds(data) {
+  const rawIds = Array.isArray(data?.pixelIds) ? data.pixelIds : [];
+  return [...new Set(rawIds.map((id) => normalizeMetaPixelId(id)).filter(isValidMetaPixelId))];
+}
+
 export function normalizePublicPixelConfig(data) {
   const page = normalizePixelPageKey(data?.page);
-  const rawIds = Array.isArray(data?.pixelIds) ? data.pixelIds : [];
-  const pixelIds = [...new Set(rawIds.map((id) => normalizeMetaPixelId(id)).filter(isValidMetaPixelId))];
-  if (pixelIds.length > 0) {
-    return { page, pixelIds };
+  const metaIds = normalizeProviderPixelIds(data?.meta);
+  const openaiIds = normalizeProviderPixelIds(data?.openai);
+  if (metaIds.length > 0 || openaiIds.length > 0) {
+    return { page, meta: { pixelIds: metaIds }, openai: { pixelIds: openaiIds } };
+  }
+  const legacyIds = normalizeProviderPixelIds({ pixelIds: data?.pixelIds });
+  if (legacyIds.length > 0) {
+    return { page, meta: { pixelIds: legacyIds }, openai: { pixelIds: [] } };
   }
   const legacyId = isValidMetaPixelId(data?.pixelId) ? normalizeMetaPixelId(data.pixelId) : "";
   if (legacyId && data?.active === true) {
-    return { page, pixelIds: [legacyId] };
+    return { page, meta: { pixelIds: [legacyId] }, openai: { pixelIds: [] } };
   }
-  return { page, pixelIds: [] };
+  return { page, meta: { pixelIds: [] }, openai: { pixelIds: [] } };
+}
+
+function normalizePageProviders(pageData) {
+  const providers = {};
+  const providersInput = pageData?.providers;
+  if (providersInput && typeof providersInput === "object") {
+    for (const providerKey of PIXEL_PROVIDER_KEYS) {
+      providers[providerKey] = {
+        slots: normalizePagePixelSlots(providersInput[providerKey]?.slots),
+      };
+    }
+    return providers;
+  }
+  for (const providerKey of PIXEL_PROVIDER_KEYS) {
+    providers[providerKey] = {
+      slots: normalizePagePixelSlots(providerKey === "meta" ? pageData?.slots : []),
+    };
+  }
+  return providers;
 }
 
 export function normalizeAdminPagesPixelConfig(data) {
@@ -56,16 +85,13 @@ export function normalizeAdminPagesPixelConfig(data) {
   if (!pagesInput || typeof pagesInput !== "object") {
     if (typeof data?.pixelId === "string") {
       const pages = emptyPagesPixelForm();
-      pages.home[0] = normalizePixelSlot(
-        { pixelId: data.pixelId, active: data.active },
-        1
-      );
+      pages.home.meta[0] = normalizePixelSlot({ pixelId: data.pixelId, active: data.active }, 1);
       return {
         pages: Object.fromEntries(
           Object.keys(pages).map((key) => [
             key,
             {
-              slots: pages[key],
+              providers: pages[key],
               updatedAt: key === "home" && typeof data.updatedAt === "string" ? data.updatedAt : null,
               updatedBy: key === "home" && typeof data.updatedBy === "string" ? data.updatedBy : null,
             },
@@ -73,18 +99,24 @@ export function normalizeAdminPagesPixelConfig(data) {
         ),
       };
     }
-    return { pages: Object.fromEntries(
-      Object.keys(emptyPagesPixelForm()).map((key) => [
-        key,
-        { slots: normalizePagePixelSlots([]), updatedAt: null, updatedBy: null },
-      ])
-    ) };
+    return {
+      pages: Object.fromEntries(
+        Object.keys(emptyPagesPixelForm()).map((key) => [
+          key,
+          {
+            providers: emptyPagesPixelForm()[key],
+            updatedAt: null,
+            updatedBy: null,
+          },
+        ])
+      ),
+    };
   }
 
   const pages = {};
   for (const [pageKey, pageData] of Object.entries(pagesInput)) {
     pages[pageKey] = {
-      slots: normalizePagePixelSlots(pageData?.slots),
+      providers: normalizePageProviders(pageData),
       updatedAt: typeof pageData?.updatedAt === "string" ? pageData.updatedAt : null,
       updatedBy: typeof pageData?.updatedBy === "string" ? pageData.updatedBy : null,
     };
@@ -123,14 +155,21 @@ export async function fetchAdminPixelConfig(fetchImpl = fetch) {
 export function buildAdminPagesPayload(pagesForm) {
   return {
     pages: Object.fromEntries(
-      Object.entries(pagesForm).map(([pageKey, slots]) => [
+      Object.entries(pagesForm).map(([pageKey, providers]) => [
         pageKey,
         {
-          slots: slots.map((slot, index) => ({
-            pixelId: normalizeMetaPixelId(slot.pixelId),
-            active: Boolean(slot.active),
-            slot: index + 1,
-          })),
+          providers: Object.fromEntries(
+            PIXEL_PROVIDER_KEYS.map((providerKey) => [
+              providerKey,
+              {
+                slots: (providers[providerKey] ?? []).map((slot, index) => ({
+                  pixelId: normalizeMetaPixelId(slot.pixelId),
+                  active: Boolean(slot.active),
+                  slot: index + 1,
+                })),
+              },
+            ])
+          ),
         },
       ])
     ),
