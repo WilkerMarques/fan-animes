@@ -32,7 +32,11 @@ describe("openAiPixel", () => {
     expect(window.oaiq).toHaveBeenCalledWith(
       "measure",
       "custom",
-      expect.objectContaining({ custom_event_name: "ClickButton" })
+      {
+        type: "custom",
+        contents: [{ id: "whatsapp", name: "WhatsApp Comunidade", content_type: "link" }],
+      },
+      { custom_event_name: "clickbutton" }
     );
   });
 });

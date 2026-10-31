@@ -88,9 +88,13 @@ export function trackOpenAiClickButton(label, platform) {
   if (!contentName || !contentCategory) {
     throw new Error("ClickButton requires label and platform.");
   }
-  window.oaiq("measure", "custom", {
-    type: "custom",
-    custom_event_name: "ClickButton",
-    contents: [{ id: contentCategory, name: contentName, content_type: "link" }],
-  });
+  window.oaiq(
+    "measure",
+    "custom",
+    {
+      type: "custom",
+      contents: [{ id: contentCategory, name: contentName, content_type: "link" }],
+    },
+    { custom_event_name: "clickbutton" }
+  );
 }
