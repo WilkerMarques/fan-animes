@@ -1,9 +1,14 @@
 <?php
 
 const PIXEL_SLOTS_PER_PAGE = 5;
+const PIXEL_ID_MAX_LENGTH = 128;
 
 function pixelPageKeys() {
     return ['home', 'rap', 'rock', 'sad', 'sertanejo', 'fananimes'];
+}
+
+function pixelProviders() {
+    return ['meta', 'openai'];
 }
 
 function normalizePixelPageKey($value) {
@@ -12,6 +17,14 @@ function normalizePixelPageKey($value) {
         return 'home';
     }
     return in_array($key, pixelPageKeys(), true) ? $key : 'home';
+}
+
+function normalizePixelProvider($value) {
+    $provider = strtolower(trim((string) $value));
+    if ($provider === '') {
+        return 'meta';
+    }
+    return in_array($provider, pixelProviders(), true) ? $provider : 'meta';
 }
 
 function normalizeMetaPixelId($value) {
@@ -29,10 +42,16 @@ function isValidMetaPixelId($value) {
     if ($id === '') {
         return false;
     }
-    if (preg_match('/[<>]|script|fbq|function|javascript:/i', $id)) {
+    if (strlen($id) > PIXEL_ID_MAX_LENGTH) {
         return false;
     }
-    return (bool) preg_match('/^\d{10,20}$/', $id);
+    if (preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F]/', $id)) {
+        return false;
+    }
+    if (preg_match('/[<>]|script|javascript:|vbscript:|data:|onerror=/i', $id)) {
+        return false;
+    }
+    return true;
 }
 
 function pixelPageConfigTableMissing(PDO $pdo) {
@@ -41,6 +60,15 @@ function pixelPageConfigTableMissing(PDO $pdo) {
         return false;
     } catch (Throwable $e) {
         return true;
+    }
+}
+
+function pixelPageConfigHasProviderColumn(PDO $pdo) {
+    try {
+        $stmt = $pdo->query("SHOW COLUMNS FROM pixel_page_config LIKE 'provider'");
+        return (bool) $stmt->fetch(PDO::FETCH_ASSOC);
+    } catch (Throwable $e) {
+        return false;
     }
 }
 
@@ -69,6 +97,14 @@ function emptyPixelSlotsArray() {
     return $slots;
 }
 
+function emptyPageProvidersShape() {
+    $providers = [];
+    foreach (pixelProviders() as $provider) {
+        $providers[$provider] = ['slots' => emptyPixelSlotsArray()];
+    }
+    return $providers;
+}
+
 function readLegacyHomePixelIds(PDO $pdo) {
     if (!legacyPixelConfigTableExists($pdo)) {
         return [];
@@ -88,11 +124,12 @@ function readLegacyHomePixelIds(PDO $pdo) {
     return [];
 }
 
-function readPagePixelSlots(PDO $pdo, $pageKey) {
+function readPagePixelSlots(PDO $pdo, $pageKey, $provider = 'meta') {
     $pageKey = normalizePixelPageKey($pageKey);
+    $provider = normalizePixelProvider($provider);
     $slots = emptyPixelSlotsArray();
     if (pixelPageConfigTableMissing($pdo)) {
-        if ($pageKey === 'home') {
+        if ($pageKey === 'home' && $provider === 'meta') {
             $legacyIds = readLegacyHomePixelIds($pdo);
             if (count($legacyIds) > 0) {
                 $slots[0]['pixelId'] = $legacyIds[0];
@@ -102,11 +139,24 @@ function readPagePixelSlots(PDO $pdo, $pageKey) {
         return $slots;
     }
 
-    $stmt = $pdo->prepare(
-        'SELECT slot, pixel_id, is_active FROM pixel_page_config
-         WHERE page_key = ? ORDER BY slot ASC'
-    );
-    $stmt->execute([$pageKey]);
+    $hasProvider = pixelPageConfigHasProviderColumn($pdo);
+    if ($hasProvider) {
+        $stmt = $pdo->prepare(
+            'SELECT slot, pixel_id, is_active FROM pixel_page_config
+             WHERE page_key = ? AND provider = ? ORDER BY slot ASC'
+        );
+        $stmt->execute([$pageKey, $provider]);
+    } else {
+        if ($provider !== 'meta') {
+            return $slots;
+        }
+        $stmt = $pdo->prepare(
+            'SELECT slot, pixel_id, is_active FROM pixel_page_config
+             WHERE page_key = ? ORDER BY slot ASC'
+        );
+        $stmt->execute([$pageKey]);
+    }
+
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
     foreach ($rows as $row) {
         $slot = (int) ($row['slot'] ?? 0);
@@ -143,10 +193,14 @@ function activePixelIdsFromSlots($slots) {
 
 function readPublicPagePixelConfig(PDO $pdo, $pageKey) {
     $pageKey = normalizePixelPageKey($pageKey);
-    $slots = readPagePixelSlots($pdo, $pageKey);
+    $metaSlots = readPagePixelSlots($pdo, $pageKey, 'meta');
+    $openaiSlots = readPagePixelSlots($pdo, $pageKey, 'openai');
+    $metaIds = activePixelIdsFromSlots($metaSlots);
     return [
         'page' => $pageKey,
-        'pixelIds' => activePixelIdsFromSlots($slots),
+        'meta' => ['pixelIds' => $metaIds],
+        'openai' => ['pixelIds' => activePixelIdsFromSlots($openaiSlots)],
+        'pixelIds' => $metaIds,
     ];
 }
 
@@ -176,8 +230,12 @@ function readAdminAllPagePixelConfigs(PDO $pdo) {
     $pages = [];
     foreach (pixelPageKeys() as $pageKey) {
         $meta = readAdminPagePixelMeta($pdo, $pageKey);
+        $providers = emptyPageProvidersShape();
+        foreach (pixelProviders() as $provider) {
+            $providers[$provider]['slots'] = readPagePixelSlots($pdo, $pageKey, $provider);
+        }
         $pages[$pageKey] = [
-            'slots' => readPagePixelSlots($pdo, $pageKey),
+            'providers' => $providers,
             'updatedAt' => $meta['updatedAt'],
             'updatedBy' => $meta['updatedBy'],
         ];
@@ -185,14 +243,15 @@ function readAdminAllPagePixelConfigs(PDO $pdo) {
     return ['pages' => $pages];
 }
 
-function normalizeIncomingPixelSlot($slotData, $slotNumber) {
+function normalizeIncomingPixelSlot($slotData, $slotNumber, $providerLabel) {
     $pixelId = normalizeMetaPixelId($slotData['pixelId'] ?? '');
     $active = !empty($slotData['active']);
+    $prefix = ucfirst($providerLabel) . ' slot ' . $slotNumber . ': ';
     if ($active && !isValidMetaPixelId($pixelId)) {
-        throw new InvalidArgumentException('Slot ' . $slotNumber . ': informe um ID válido para ativar.');
+        throw new InvalidArgumentException($prefix . 'informe um ID válido para ativar.');
     }
     if ($pixelId !== '' && !isValidMetaPixelId($pixelId)) {
-        throw new InvalidArgumentException('Slot ' . $slotNumber . ': ID do Pixel inválido.');
+        throw new InvalidArgumentException($prefix . 'ID do Pixel inválido.');
     }
     return [
         'slot' => $slotNumber,
@@ -201,48 +260,113 @@ function normalizeIncomingPixelSlot($slotData, $slotNumber) {
     ];
 }
 
-function normalizeIncomingPageSlots($slots) {
+function normalizeIncomingPageSlots($slots, $providerLabel = 'meta') {
     if (!is_array($slots)) {
-        throw new InvalidArgumentException('Cada página precisa de ' . PIXEL_SLOTS_PER_PAGE . ' slots.');
+        throw new InvalidArgumentException($providerLabel . ': cada página precisa de ' . PIXEL_SLOTS_PER_PAGE . ' slots.');
     }
     if (count($slots) !== PIXEL_SLOTS_PER_PAGE) {
-        throw new InvalidArgumentException('Cada página precisa de ' . PIXEL_SLOTS_PER_PAGE . ' slots.');
+        throw new InvalidArgumentException($providerLabel . ': cada página precisa de ' . PIXEL_SLOTS_PER_PAGE . ' slots.');
     }
     $normalized = [];
     for ($i = 0; $i < PIXEL_SLOTS_PER_PAGE; $i++) {
-        $normalized[] = normalizeIncomingPixelSlot($slots[$i], $i + 1);
+        $normalized[] = normalizeIncomingPixelSlot($slots[$i], $i + 1, $providerLabel);
     }
     return $normalized;
 }
 
-function savePagePixelSlots(PDO $pdo, $pageKey, $slots, $updatedBy) {
+function savePagePixelSlots(PDO $pdo, $pageKey, $provider, $slots, $updatedBy) {
     $pageKey = normalizePixelPageKey($pageKey);
+    $provider = normalizePixelProvider($provider);
     if (pixelPageConfigTableMissing($pdo)) {
         throw new RuntimeException('Tabela pixel_page_config não existe. Rode hostgator/api/migrate-pixel-pages.sql no banco.');
     }
-    $normalized = normalizeIncomingPageSlots($slots);
-    $stmt = $pdo->prepare(
-        'INSERT INTO pixel_page_config (page_key, slot, pixel_id, is_active, updated_at, updated_by)
-         VALUES (?, ?, ?, ?, NOW(), ?)
-         ON DUPLICATE KEY UPDATE
-           pixel_id = VALUES(pixel_id),
-           is_active = VALUES(is_active),
-           updated_at = NOW(),
-           updated_by = VALUES(updated_by)'
-    );
-    foreach ($normalized as $slot) {
-        $stmt->execute([
-            $pageKey,
-            $slot['slot'],
-            $slot['pixelId'],
-            $slot['active'] ? 1 : 0,
-            $updatedBy,
-        ]);
+    if ($provider !== 'meta' && !pixelPageConfigHasProviderColumn($pdo)) {
+        throw new RuntimeException('Coluna provider ausente. Rode hostgator/api/migrate-pixel-provider.sql no banco.');
     }
+    $normalized = normalizeIncomingPageSlots($slots, $provider);
+    if (pixelPageConfigHasProviderColumn($pdo)) {
+        $stmt = $pdo->prepare(
+            'INSERT INTO pixel_page_config (page_key, provider, slot, pixel_id, is_active, updated_at, updated_by)
+             VALUES (?, ?, ?, ?, ?, NOW(), ?)
+             ON DUPLICATE KEY UPDATE
+               pixel_id = VALUES(pixel_id),
+               is_active = VALUES(is_active),
+               updated_at = NOW(),
+               updated_by = VALUES(updated_by)'
+        );
+        foreach ($normalized as $slot) {
+            $stmt->execute([
+                $pageKey,
+                $provider,
+                $slot['slot'],
+                $slot['pixelId'],
+                $slot['active'] ? 1 : 0,
+                $updatedBy,
+            ]);
+        }
+    } else {
+        if ($provider !== 'meta') {
+            return readPagePixelSlots($pdo, $pageKey, $provider);
+        }
+        $stmt = $pdo->prepare(
+            'INSERT INTO pixel_page_config (page_key, slot, pixel_id, is_active, updated_at, updated_by)
+             VALUES (?, ?, ?, ?, NOW(), ?)
+             ON DUPLICATE KEY UPDATE
+               pixel_id = VALUES(pixel_id),
+               is_active = VALUES(is_active),
+               updated_at = NOW(),
+               updated_by = VALUES(updated_by)'
+        );
+        foreach ($normalized as $slot) {
+            $stmt->execute([
+                $pageKey,
+                $slot['slot'],
+                $slot['pixelId'],
+                $slot['active'] ? 1 : 0,
+                $updatedBy,
+            ]);
+        }
+    }
+
     $meta = readAdminPagePixelMeta($pdo, $pageKey);
     return [
         'page' => $pageKey,
-        'slots' => readPagePixelSlots($pdo, $pageKey),
+        'provider' => $provider,
+        'slots' => readPagePixelSlots($pdo, $pageKey, $provider),
+        'updatedAt' => $meta['updatedAt'],
+        'updatedBy' => $meta['updatedBy'],
+    ];
+}
+
+function savePageAllProviders(PDO $pdo, $pageKey, $pageInput, $updatedBy) {
+    $providersInput = $pageInput['providers'] ?? null;
+    if (is_array($providersInput)) {
+        $savedProviders = [];
+        foreach (pixelProviders() as $provider) {
+            if (!isset($providersInput[$provider]['slots']) && !isset($providersInput[$provider])) {
+                throw new InvalidArgumentException('Faltou provider ' . $provider . ' em ' . $pageKey);
+            }
+            $slots = $providersInput[$provider]['slots'] ?? $providersInput[$provider];
+            savePagePixelSlots($pdo, $pageKey, $provider, $slots, $updatedBy);
+            $savedProviders[$provider] = ['slots' => readPagePixelSlots($pdo, $pageKey, $provider)];
+        }
+        $meta = readAdminPagePixelMeta($pdo, $pageKey);
+        return [
+            'providers' => $savedProviders,
+            'updatedAt' => $meta['updatedAt'],
+            'updatedBy' => $meta['updatedBy'],
+        ];
+    }
+
+    $slots = $pageInput['slots'] ?? $pageInput;
+    savePagePixelSlots($pdo, $pageKey, 'meta', $slots, $updatedBy);
+    $meta = readAdminPagePixelMeta($pdo, $pageKey);
+    $providers = emptyPageProvidersShape();
+    foreach (pixelProviders() as $provider) {
+        $providers[$provider]['slots'] = readPagePixelSlots($pdo, $pageKey, $provider);
+    }
+    return [
+        'providers' => $providers,
         'updatedAt' => $meta['updatedAt'],
         'updatedBy' => $meta['updatedBy'],
     ];
@@ -257,7 +381,7 @@ function saveAllPagePixelConfigs(PDO $pdo, $pagesInput, $updatedBy) {
         if (!isset($pagesInput[$pageKey])) {
             throw new InvalidArgumentException('Faltou a página: ' . $pageKey);
         }
-        $saved[$pageKey] = savePagePixelSlots($pdo, $pageKey, $pagesInput[$pageKey]['slots'] ?? $pagesInput[$pageKey], $updatedBy);
+        $saved[$pageKey] = savePageAllProviders($pdo, $pageKey, $pagesInput[$pageKey], $updatedBy);
     }
     return ['pages' => $saved];
 }
@@ -267,7 +391,7 @@ function pixelConfigTableMissing(PDO $pdo) {
 }
 
 function readPixelConfig(PDO $pdo) {
-    $home = readPagePixelSlots($pdo, 'home');
+    $home = readPagePixelSlots($pdo, 'home', 'meta');
     $first = $home[0];
     $meta = readAdminPagePixelMeta($pdo, 'home');
     return [
@@ -282,14 +406,15 @@ function savePixelConfig(PDO $pdo, $pixelId, $active, $updatedBy) {
     $slots = emptyPixelSlotsArray();
     $slots[0] = normalizeIncomingPixelSlot(
         ['pixelId' => $pixelId, 'active' => $active],
-        1
+        1,
+        'meta'
     );
-    savePagePixelSlots($pdo, 'home', $slots, $updatedBy);
+    savePagePixelSlots($pdo, 'home', 'meta', $slots, $updatedBy);
     return readPixConfigLegacyShape($pdo);
 }
 
 function readPixConfigLegacyShape(PDO $pdo) {
-    $home = readPagePixelSlots($pdo, 'home');
+    $home = readPagePixelSlots($pdo, 'home', 'meta');
     $first = $home[0];
     $meta = readAdminPagePixelMeta($pdo, 'home');
     return [

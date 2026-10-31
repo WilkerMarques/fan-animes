@@ -65,7 +65,7 @@ CREATE TABLE pageviews_daily (
 
 CREATE TABLE pixel_config (
   id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
-  pixel_id VARCHAR(32) NOT NULL DEFAULT '',
+  pixel_id VARCHAR(128) NOT NULL DEFAULT '',
   is_active TINYINT(1) NOT NULL DEFAULT 0,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   updated_by VARCHAR(64) NULL
@@ -76,14 +76,15 @@ VALUES (1, '1736644321794726', 1, 'admin');
 
 CREATE TABLE pixel_page_config (
   page_key VARCHAR(32) NOT NULL,
+  provider VARCHAR(16) NOT NULL DEFAULT 'meta',
   slot TINYINT UNSIGNED NOT NULL,
-  pixel_id VARCHAR(32) NOT NULL DEFAULT '',
+  pixel_id VARCHAR(128) NOT NULL DEFAULT '',
   is_active TINYINT(1) NOT NULL DEFAULT 0,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   updated_by VARCHAR(64) NULL,
-  PRIMARY KEY (page_key, slot),
+  PRIMARY KEY (page_key, provider, slot),
   CONSTRAINT chk_pixel_page_slot CHECK (slot >= 1 AND slot <= 5)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
-INSERT INTO pixel_page_config (page_key, slot, pixel_id, is_active, updated_by)
-VALUES ('home', 1, '1736644321794726', 1, 'admin');
+INSERT INTO pixel_page_config (page_key, provider, slot, pixel_id, is_active, updated_by)
+VALUES ('home', 'meta', 1, '1736644321794726', 1, 'admin');
