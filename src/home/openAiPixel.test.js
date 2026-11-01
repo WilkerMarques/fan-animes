@@ -25,18 +25,13 @@ describe("openAiPixel", () => {
     expect(window.oaiq.mock.calls.filter((call) => call[1] === "page_viewed")).toHaveLength(1);
   });
 
-  test("tracks custom ClickButton events", () => {
+  test("tracks contents_viewed on link clicks", () => {
     window.oaiq = jest.fn();
     installOpenAiPixels(["MCJXHhHwXwLQLYxMWbCEAs"]);
     trackOpenAiClickButton("WhatsApp Comunidade", "whatsapp");
-    expect(window.oaiq).toHaveBeenCalledWith(
-      "measure",
-      "custom",
-      {
-        type: "custom",
-        contents: [{ id: "whatsapp", name: "WhatsApp Comunidade", content_type: "link" }],
-      },
-      { custom_event_name: "clickbutton" }
-    );
+    expect(window.oaiq).toHaveBeenCalledWith("measure", "contents_viewed", {
+      type: "contents",
+      contents: [{ id: "whatsapp", name: "WhatsApp Comunidade", content_type: "link" }],
+    });
   });
 });
